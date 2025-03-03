@@ -1,0 +1,62 @@
+#########################################################################################################################			
+INSTITUTO NACIONAL DE ESTADÍSTICA	www.ine.es		
+			
+FICHEROS DE MICRODATOS			
+	ENCUESTA DE CONDICIONES DE VIDA (ECV)		
+	AÑO (periodo = 2023)		
+############################################################			
+
+Esta operación estadística consta de los siguientes ficheros: 
+
+1. TRANSVERSALES. Base 2013. Compuestos por:
+
+	- Fichero D: Datos básicos del hogar (ECV_Td)
+	- Fichero R: Datos básicos de la persona (ECV_Tr)
+	- Fichero H: Datos detallados del hogar (ECV_Th) 
+	- Fichero P: Datos detallados de los adultos (ECV_Tp)
+	
+2. LONGITUDINALES. Base 2013. Compuestos por:
+
+	- Fichero D: Datos básicos del hogar (ECV_Ld)
+	- Fichero R: Datos básicos de la persona (ECV_Lr) 
+	- Fichero H: Datos detallados del hogar (ECV_Lh) 
+	- Fichero P: Datos detallados de los adultos (ECV_Lp)
+
+############################################################			
+Cada AÑO contiene un fichero comprimido "datos_periodo.zip", con los siguientes archivos:
+
+1-Este archivo "LeemeECV_periodo.txt"
+
+2-Todos los diseños de registro del periodo: "disreg_ecvperiodo.zip", en formato Excel: "dr_ECV_nombreFichero_periodo.xlsx"			
+
+3-Los datos en diferentes formatos, en un archivo comprimido: "ECV_nombreFichero_periodo.zip", que contiene:
+
+31-El fichero de microdatos en formato txt, ancho fijo ("md_ECV_nombreFichero_periodo.txt"). 
+   La longitud de cada variable se puede consultar en el diseño de registro "dr_ECV_nombreFichero_periodo.xlsx")
+ 
+32-Cinco directorios: CSV, R, SAS, SPSS, STATA, con el siguiente contenido:			
+			
+321- El directorio CSV contiene los ficheros de microdatos en dos formatos CSV:			
+	a) Campos separados por tabulador ("ECV_nombreFichero_periodo.tab")		
+	b) Campos separados por comas ("esudb..periodo..letraFichero.csv") 
+			
+322- El directorio R contiene:			
+	a) El fichero de microdatos en formato RData ("ECV_nombreFichero_periodo.RData")			
+			
+323- El directorio SAS contiene:			
+	a) Fichero de microdatos en formato SAS, con los datos codificados (es decir,		
+	   las variables cualitativas son un código numérico, por ejemplo '40' en lugar		
+	   de 'Segovia') ("ECV_nombreFichero_periodo.sas7bdat")		
+	b) Programa SAS con las sentencias para dar formato a las variables del fichero		
+	   de microdatos anterior ("ECV_nombreFichero_periodo_conFormato.sas")		
+			
+324- El directorio SPSS contiene:			
+	a) Fichero de microdatos en formato SPSS, con los diccionarios de las variables		
+	   integrados ("ECV_nombreFichero_periodo.sav")		
+	   		
+325- El directorio STATA contiene:			
+	a) Fichero de microdatos en formato STATA, sin los diccionarios de las variables		
+	   integrados ("ECV_nombreFichero_periodo.dta"). Las etiquetas, las variables y los 
+	   valores pueden consultarse en el diseño de registro "dr_ECV_nombreFichero_periodo.xlsx"		
+			
+#########################################################################################################################			
