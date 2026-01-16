@@ -523,6 +523,21 @@ summary(data$meanageadults)
 hist(data$meanageadults)
 boxplot(data$meanageadults)
 
+## g. Scale "rooms" ----
+
+# Check distribution of rooms
+summary(data$rooms) # 71 NA's !!!  
+hist(data$rooms, main = "Rooms", col = "lightblue")
+boxplot(data$rooms, main = "Rooms", col = "lightblue")
+
+# Standardize rooms (mean = 0, SD = 1) for numerical stability
+data$rooms_z <- scale(data$rooms)[,1]
+
+# Checks: scaled variable
+summary(data$rooms_z)
+hist(data$rooms_z, main = "Rooms - Scaled", col = "lightgreen")
+boxplot(data$rooms_z, main = "Rooms - Scaled", col = "lightgreen")
+
 
 
 save(data, file = "data.RData")
