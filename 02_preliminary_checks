@@ -1,0 +1,162 @@
+###############################################################################
+# Project       : [rehabSpain] [2] PRE-ESTIMATION CHECKS
+# Creation date : 20/11/2025
+# Last update   : 17/01/2026
+# Author        : Mercè Amich (merce.amich@ehu.eus)
+# Institution   : UPV/EHU, BC3
+# Last run time : 1.43 min.
+#
+# Script Overview:
+#   This script computes and analyses:
+#     - Correlation matrices
+#     - eta^2 (one-way ANOVA) for climatic zones
+#   
+# Requirements:
+#   - This script must be in the same directory as:
+#       a) data.rds
+#     
+###############################################################################
+
+# =============================== PRELIMINARIES ==============================
+
+rm(list = ls(all = TRUE)) # Clear workspace
+Sys.setenv(LANG = "en") # Set system language
+start.time <- Sys.time() # Track start time
+
+# --------------------------- Load Required Packages & Data --------------------
+packages.needed <- c(
+  "here", "rvest", "httr", "dplyr", "ggplot2", "pscl", "AER", "scales",
+  "survey", "gridExtra", "readxl", "effects", "foreign", "aod", "lmtest",
+  "DescTools", "stargazer", "Hmisc", "margins", "plotly", "lme4", "ggeffects",
+  "patchwork", "marginaleffects", "forcats", "rnaturalearth", "sf", "mgcv",
+  "gratia", "glmx", "ResourceSelection", "pROC", "tidyr", "car"
+)
+
+# Install & load packages
+packages.loaded <- installed.packages()
+for (p in packages.needed) {
+  if (!p %in% row.names(packages.loaded)) install.packages(p)
+  library(p, character.only = TRUE)
+}
+
+path <- here() # Define working directory
+setwd(path)
+load(file.path("data.RData")) # Load data object
+
+# ======================= 1. CORRELATION MATRICES ==============================
+
+# We need to ensure that multicolinearity issues are minimised, both within and
+# between the mean equation and the scale equation variables
+
+# The check is done separatedly for the whole set of variables first, and 
+# then for the HDD/CDD ones for clarity
+
+names(data) # Explore variable names
+numeric_data <- data[sapply(data, is.numeric)] # Select only numeric vars
+cor_matrix <- cor(numeric_data, use = "pairwise.complete.obs") # Compute matrix
+
+# Convert correlation matrix to long format (pairs)
+cor_matrix <- as.data.frame(as.table(cor_matrix)) %>% 
+  rename(var1 = Var1, 
+         var2 = Var2, 
+         correlation = Freq) %>%
+  filter(var1 != var2) %>%  # remove self-correlations for clarity
+  mutate(abs_correlation = abs(correlation)) %>%
+  filter(abs_correlation >= 0.5) %>%  # keep only >=0.5 abs(corr) values
+  arrange(desc(abs_correlation))  # sort descending
+
+# i) Corr matrix (all but HDD/CDD)
+cor_matrix_vars <- cor_matrix %>%
+  rowwise() %>%
+  mutate(pair = paste(sort(c(var1, var2)), collapse = "_")) %>%
+  distinct(pair, .keep_all = TRUE) %>%
+  filter(
+    !(grepl("^HDD", var1) & grepl("^HDD", var2)) & # exclude HDD
+    !(grepl("^CDD", var1) & grepl("^CDD", var2)) # exclude CDD
+  ) %>%
+  select(-pair)
+
+# ii) Corr matrix (HDD vs. CDD) 
+cor_matrix_dd <- cor_matrix %>%
+  rowwise() %>%
+  mutate(pair = paste(sort(c(var1, var2)), collapse = "_")) %>%
+  distinct(pair, .keep_all = TRUE) %>%
+  # keep only combinations where one is HDD and the other is CDD:
+  filter(
+    (grepl("^HDD", var1) & grepl("^CDD", var2)) |
+      (grepl("^CDD", var1) & grepl("^HDD", var2))
+  ) %>%
+  select(-pair)
+
+# Analysis of cor_matrix_vars (>= 0.5):
+print(cor_matrix_vars, n = 1000) 
+
+# Mutually exclusive (or almost) vars. by definition:
+#   flatorapt / detached
+#   housingcosts / actualrent
+#   retrofit / count
+#   rental / ownership
+
+# Risky correlations to avoid (~ 0.7 - 0.6):
+#   twoadults / oneadult
+#   kids / hhmembers
+#   mediumpopulation / highpopulation
+#   detached / flatmore10
+#   flatorapt / flatmore10
+#   HDD vars. / canarias
+#   oneadult / hhmembers
+#   detached / detachedindep
+#   flatorapt / detachedindep
+#   flatorapt / semidetached
+#   detached / semidetached
+#   gas_heat / electricity_heat
+
+# Analysis of cor_matrix_dd (>= 0.5):
+print(cor_matrix_dd, n = 1000)
+
+# "media" vars: highest correlations between HDD/CDD (0.6)
+
+# ======================= 2. ONE-WAY ANOVA eta^2 ===============================
+
+# We do know that INE's climatic zones (CZ) represent the severity of the
+# winter, rather than the severity of the summer conditions
+
+# HDD/CDD are defined at NUTS2 levels (CCAA) and climatic zones not (more
+# granular)
+
+# Therefore, in this block we assess the possibility of introducing CZ joint
+# with CDD to represent i) both climatic metrics ii) both spatial dimensions
+
+# To do so, we use one-way ANOVA eta-squared metric to assess potential 
+# redundancy between CZ and CDD (we compute it to HDD and NUTS2 also). 
+# The metric captures the part of variance explained by data$zc in the other 
+# vars and it is used as a diagnostic of informational overlap (not as a test)
+
+numeric_vars <- names(data[sapply(data, is.numeric)]) # Extract names
+
+etas <- sapply(numeric_vars, # Loop over numeric variables
+               function(x)  # For each variable x,
+                 EtaSq(aov(data[[x]] ~ data$zc), # Estimate 1-w ANOVA with CZs
+                       type = 1) # Compute eta^2 (share of variance explained)
+        )[1, ] # Extract eta^2
+
+etas <- etas[!is.na(etas)] # Remove NaN's
+etas <- etas[abs(etas) >= 0.5] # Keep only >= 0.5 (abs)
+
+print(etas <- data.frame(
+  variable    = names(etas),
+  eta_squared = etas,
+  row.names   = NULL  # ensure no problematic rownames
+) %>%
+  arrange(desc(eta_squared)) # arrange in descending order
+  )
+
+# Climatic zones explain >=0.5 variance of:
+# Most HDD metrics (as expected)
+# Canary Islands NUTS2 - Expected for "alpha" special CZ of the region
+
+
+# Track and print total time of execution
+end.time <- Sys.time()
+cat ("Total time of execution:", round(end.time - start.time, 2), "min")
+
