@@ -1,9 +1,10 @@
+###############################################################################
 # Project       : [rehabSpain] [1] DOWNLOAD DATA & MERGE FUSED AND CLIMATIC
 # Creation date : 02/12/2024
 # Last update   : 16/01/2026
 # Author        : Mercè Amich (merce.amich@ehu.eus)
 # Institution   : UPV/EHU, BC3
-# Last run time : 11.75 min.
+# Last run time : 2 min.
 
 # Script Overview:
 #   This script processes SILC-23 data from INE, merges additional data 
@@ -18,6 +19,7 @@
 #       c) /MATCHING/fused_data.csv
 #       d) /ZC/ (upon request for confidentiality requirements)
      
+###############################################################################
 
 # =============================== PRELIMINARIES ==============================
 
@@ -203,8 +205,8 @@ household <- household %>%
     flatless10    = ifelse(any(HH010 == 3), 1, 0),
     flatmore10    = ifelse(any(HH010 == 4), 1, 0),
     
-    detached     = ifelse(HH010 == 1 | HH010 == 2, 1, 0),
-    flatorapt    = ifelse(HH010 == 3 | HH010 == 4, 1, 0),
+    detached     = ifelse(any(HH010 %in% c(1,2)), 1, 0),
+    flatorapt    = ifelse(any(HH010 %in% c(3,4)), 1, 0),
     
     ownership    = ifelse(any(HH021 == 1 | HH021 == 2), 1, 0),
     rental       = ifelse(any(HH021 == 3 | HH021 == 4), 1, 0),
@@ -216,11 +218,7 @@ household <- household %>%
     twoadults    = ifelse(any(HX060 %in% c(7, 8, 11, 12, 13)), 1, 0),
     otherhhtypes = ifelse(any(HX060 %in% c(9, 14)), 1, 0),
     kids         = ifelse(any(HX060 %in% c(10, 11, 12, 13, 14)), 1, 0),
-    
-    naturalight  = ifelse(any(HS160 == "1"), 1, 0),
-    noises       = ifelse(any(HS170 == "1"), 1, 0),
-    pollution    = ifelse(any(HS180 == "1"), 1, 0),
-    
+  
     sqmeters     = as.numeric(HC020),
     sqmeteroom   = as.numeric(HC020) / as.numeric(HH030),
     
@@ -232,14 +230,14 @@ household <- household %>%
     portableheating = ifelse(any(HC001 == "4"), 1, 0),
     noheatingsystem = ifelse(any(HC001 == "5"), 1, 0),
     
-    electricity_heat = ifelse(HC002 == "1", 1, 0),
-    gas_heat         = ifelse(HC002 == "2", 1, 0),
-    gasoil_heat      = ifelse(HC002 == "3", 1, 0),
-    biomass_heat     = ifelse(HC002 == "4", 1, 0),
-    wood_heat        = ifelse(HC002 == "5", 1, 0),
-    coal_heat        = ifelse(HC002 == "6", 1, 0),
-    renewable_heat   = ifelse(HC002 == "7", 1, 0),
-    other_heat       = ifelse(HC002 == "8", 1, 0),
+    electricity_heat = ifelse(any(HC002 == "1"), 1, 0),
+    gas_heat         = ifelse(any(HC002 == "2"), 1, 0),
+    gasoil_heat      = ifelse(any(HC002 == "3"), 1, 0),
+    biomass_heat     = ifelse(any(HC002 == "4"), 1, 0),
+    wood_heat        = ifelse(any(HC002 == "5"), 1, 0),
+    coal_heat        = ifelse(any(HC002 == "6"), 1, 0),
+    renewable_heat   = ifelse(any(HC002 == "7"), 1, 0),
+    other_heat       = ifelse(any(HC002 == "8"), 1, 0),
     
     vhRentaa         = as.numeric(vhRentaa),
     
@@ -286,13 +284,17 @@ individual <- individual %>%
     weight          = first(as.numeric(RB050)),
     
     # Mean age of adults (age >= 18)
-    meanageadults   = ifelse(sum(RB082 >= 18) == 0, 0, mean(RB082[RB082 >= 18])), 
+    meanageadults = ifelse(sum(RB082 >= 18, na.rm = TRUE) == 0, NA_real_,
+                           mean(RB082[RB082 >= 18], na.rm = TRUE)),
     
     # Proportion of male adults (age >= 18)
-    propmale        = ifelse(sum(RB082 >= 18) == 0, 0, sum(RB090 == 1 & RB082 >= 18) / sum(RB082 >= 18)), 
+    propmale        = ifelse(sum(RB082 >= 18, na.rm = TRUE) == 0, NA_real_,
+                      sum(RB090 == 1 & RB082 >= 18, na.rm = TRUE) / sum(RB082 >= 18, na.rm = TRUE)),
+    
     
     # Income stability: 1 if any member has RB211 == 3 or 4, or PL141 == 21 or 22
-    incomestability = ifelse(all(RB211 %in% c(3, 4), na.rm = TRUE) | all(PL141 %in% c(21, 22), na.rm = TRUE), 1, 0),
+    incomestability  = ifelse(any(RB211 %in% c(3, 4), na.rm = TRUE) |
+                        any(PL141 %in% c(21, 22), na.rm = TRUE), 1, 0),
     
     # All members in the household have high education (PE041 == 500)
     allhigheducation = ifelse(all(PE041 == 500, na.rm = TRUE), 1, 0)
@@ -313,7 +315,7 @@ data <- left_join(household, individual, by = c("DB030", "weight"))
 # Do not distribute it under any circumstance
 
 zc_path <- paste0(path, "/ZC/ZC_ECV2023.txt")
-zc      <- read.csv(zc_path, header = TRUE, sep = ",", stringsAsFactors = FALSE)
+zc      <- read.csv(zc_path, header = FALSE, sep = ",", stringsAsFactors = FALSE)
 
 head(zc) # Each observation's information is on a single row, need to trim it
 
@@ -333,6 +335,7 @@ zc$DB030  <- as.numeric(zc$DB030) # Ensure DB030 is numeric
 # Checks
 head(zc) # of the final structure
 table(zc$zc) # of the distribution of counts
+class(zc$zc)
 
 # According to INE's e-mail (28.07.2025):
 # "a" is the "climatic zone "alpha", that is, Canary Islands
@@ -340,7 +343,7 @@ table(zc$zc) # of the distribution of counts
 
 # See pg. 34 of the report for more information on their definition:
 # https://www.miteco.gob.es/content/dam/miteco/es/prensa/estrategianacionalcontralapobrezaenergetica2019-2024_tcm30-496282.pdf
-# !!! they relate to winter's severity, not summer
+# !!! they relate to winter's severity, not summer's
 
 # alpha: Canarias
 # A "(Cálida en invierno): Mediterráneo costero"
@@ -349,17 +352,12 @@ table(zc$zc) # of the distribution of counts
 # D "(Fría en invierno): Meseta, zonas interiores"
 # E "(Muy fría): Regiones de montaña"
 
-sum(is.na(zc$zc))
-zc$zc[zc$zc == 9] <- NA # Remove NA's
+zc$zc <- trimws(zc$zc)
+zc$zc[zc$zc == "9"] <- NA_character_
 table(zc$zc) # Check
 data <- left_join(data, zc, by = "DB030") # Merge "zc" with previous data object
 sum(is.na(data$zc))
 
-# From 17 to 18 NA's. Why?
-anti_join(data, zc, by = "DB030")
-setdiff(unique(data$DB030), unique(zc$DB030))
-
-# One observation (DB030 ==1) could not be assigned to any climatic zone
 # Is treated as NA. To control removed observations, we create:
 
 removed_dataset <- (sum(is.na(data$zc)) / nrow(data)) * 100
@@ -516,12 +514,12 @@ par(mfrow=c(1,1))
 summary(data$meanageadults)
 hist(data$meanageadults)
 boxplot(data$meanageadults)
-data$meanageadults <- scale(data$meanageadults)[,1]
+data$meanageadults_z <- scale(data$meanageadults)[,1]
 
 # Checks:
-summary(data$meanageadults)
-hist(data$meanageadults)
-boxplot(data$meanageadults)
+summary(data$meanageadults_z)
+hist(data$meanageadults_z)
+boxplot(data$meanageadults_z)
 
 ## g. Scale "rooms" ----
 
@@ -538,6 +536,82 @@ summary(data$rooms_z)
 hist(data$rooms_z, main = "Rooms - Scaled", col = "lightgreen")
 boxplot(data$rooms_z, main = "Rooms - Scaled", col = "lightgreen")
 
+## h. Scale "sqmeteroom" and "sqmeters" ----
 
+# Check distribution of sqmeteroom
+summary(data$sqmeteroom)
+hist(data$sqmeteroom, main = "Square Meters per Room", col = "lightblue")
+boxplot(data$sqmeteroom, main = "Square Meters per Room", col = "lightblue")
 
+# Standardize sqmeteroom
+data$sqmeteroom_z <- scale(data$sqmeteroom)[,1]
+
+# Checks: scaled variable
+summary(data$sqmeteroom_z)
+hist(data$sqmeteroom_z, main = "Square Meters per Room - Scaled", col = "lightgreen")
+boxplot(data$sqmeteroom_z, main = "Square Meters per Room - Scaled", col = "lightgreen")
+
+# Check distribution of sqmeters
+summary(data$sqmeters)
+hist(data$sqmeters, main = "Square Meters per Room", col = "lightblue")
+boxplot(data$sqmeters, main = "Square Meters per Room", col = "lightblue")
+
+# Standardize sqmeteroom
+data$sqmeters_z <- scale(data$sqmeters)[,1]
+
+# Checks: scaled variable
+summary(data$sqmeters_z)
+hist(data$sqmeters_z, main = "Square Meters per Room - Scaled", col = "lightgreen")
+boxplot(data$sqmeters_z, main = "Square Meters per Room - Scaled", col = "lightgreen")
+
+## i. Scale "actualrent" ----
+
+# Check distribution of actualrent
+summary(data$actualrent)
+hist(data$actualrent, main = "Actual Rent", col = "lightblue")
+boxplot(data$actualrent, main = "Actual Rent", col = "lightblue")
+
+# Standardize actualrent
+data$actualrent_z <- scale(data$actualrent)[,1]
+
+# Checks: scaled variable
+summary(data$actualrent_z)
+hist(data$actualrent_z, main = "Actual Rent - Scaled", col = "lightgreen")
+boxplot(data$actualrent_z, main = "Actual Rent - Scaled", col = "lightgreen")
+
+## j. Scale "housingcosts" ----
+
+# Check distribution of housingcosts
+summary(data$housingcosts)
+hist(data$housingcosts, main = "Housing Costs", col = "lightblue")
+boxplot(data$housingcosts, main = "Housing Costs", col = "lightblue")
+
+# Standardize housingcosts
+data$housingcosts_z <- scale(data$housingcosts)[,1]
+
+# Checks: scaled variable
+summary(data$housingcosts_z)
+hist(data$housingcosts_z, main = "Housing Costs - Scaled", col = "lightgreen")
+boxplot(data$housingcosts_z, main = "Housing Costs - Scaled", col = "lightgreen")
+
+## k. Scale "hh_members" ----
+
+# Check distribution of hh_members
+summary(data$hhmembers)
+hist(data$hhmembers, main = "Household Members", col = "lightblue")
+boxplot(data$hhmembers, main = "Household Members", col = "lightblue")
+
+# Standardize hh_members
+data$hhmembers_z <- scale(data$hhmembers)[,1]
+
+# Checks: scaled variable
+summary(data$hhmembers_z)
+hist(data$hhmembers_z, main = "Household Members - Scaled", col = "lightgreen")
+boxplot(data$hhmembers_z, main = "Household Members - Scaled", col = "lightgreen")
+
+# Save data object
 save(data, file = "data.RData")
+
+# Track and print total time of execution
+end.time <- Sys.time()
+cat ("Total time of execution:", round(end.time - start.time, 2), "min")
