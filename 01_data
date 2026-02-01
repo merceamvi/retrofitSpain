@@ -189,6 +189,8 @@ household <- household %>%
     pagar.enoughtemp.wint = ifelse(any(HH050 == "1"), 1, 0),
     material.depriv       = ifelse(any(vhMATDEP == "1"), 1, 0),
     satisfac.vivienda     = as.numeric(HC080),
+    satisfac.vivienda_n   = ifelse(any(HC080 %in% c("1","2")), 1,
+                               ifelse(any(HC080 %in% c("3","4")), 0, NA_real_)),
     
     enough.temp.wint = ifelse(any(HC060 == "1"), 1, 0),
     enough.temp.summ = ifelse(any(HC070 == "1"), 1, 0),
