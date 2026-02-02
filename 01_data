@@ -18,7 +18,7 @@
 #       b) HDD_CDD.xls
 #       c) /MATCHING/fused_data.csv
 #       d) /ZC/ (upon request for confidentiality requirements)
-     
+
 ###############################################################################
 
 # =============================== PRELIMINARIES ==============================
@@ -188,9 +188,10 @@ household <- household %>%
     
     pagar.enoughtemp.wint = ifelse(any(HH050 == "1"), 1, 0),
     material.depriv       = ifelse(any(vhMATDEP == "1"), 1, 0),
+    
     satisfac.vivienda     = as.numeric(HC080),
     satisfac.vivienda_n   = ifelse(any(HC080 %in% c("1","2")), 1,
-                               ifelse(any(HC080 %in% c("3","4")), 0, NA_real_)),
+                              ifelse(any(HC080 %in% c("3","4")), 0, NA_real_)),
     
     enough.temp.wint = ifelse(any(HC060 == "1"), 1, 0),
     enough.temp.summ = ifelse(any(HC070 == "1"), 1, 0),
@@ -220,7 +221,7 @@ household <- household %>%
     twoadults    = ifelse(any(HX060 %in% c(7, 8, 11, 12, 13)), 1, 0),
     otherhhtypes = ifelse(any(HX060 %in% c(9, 14)), 1, 0),
     kids         = ifelse(any(HX060 %in% c(10, 11, 12, 13, 14)), 1, 0),
-  
+    
     sqmeters     = as.numeric(HC020),
     sqmeteroom   = as.numeric(HC020) / as.numeric(HH030),
     
@@ -291,12 +292,12 @@ individual <- individual %>%
     
     # Proportion of male adults (age >= 18)
     propmale        = ifelse(sum(RB082 >= 18, na.rm = TRUE) == 0, NA_real_,
-                      sum(RB090 == 1 & RB082 >= 18, na.rm = TRUE) / sum(RB082 >= 18, na.rm = TRUE)),
+                             sum(RB090 == 1 & RB082 >= 18, na.rm = TRUE) / sum(RB082 >= 18, na.rm = TRUE)),
     
     
     # Income stability: 1 if any member has RB211 == 3 or 4, or PL141 == 21 or 22
     incomestability  = ifelse(any(RB211 %in% c(3, 4), na.rm = TRUE) |
-                        any(PL141 %in% c(21, 22), na.rm = TRUE), 1, 0),
+                                any(PL141 %in% c(21, 22), na.rm = TRUE), 1, 0),
     
     # All members in the household have high education (PE041 == 500)
     allhigheducation = ifelse(all(PE041 == 500, na.rm = TRUE), 1, 0)
@@ -362,7 +363,7 @@ sum(is.na(data$zc))
 
 # Is treated as NA. To control removed observations, we create:
 
-removed_dataset <- (sum(is.na(data$zc)) / nrow(data)) * 100
+removed_dataset  <- (sum(is.na(data$zc)) / nrow(data)) * 100
 removed_weighted <- (sum(data$weight[is.na(data$zc)]) / sum(data$weight)) * 100
 
 removed_dataset # 0.06%
