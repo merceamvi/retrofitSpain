@@ -74,7 +74,7 @@ cor_matrix_vars <- cor_matrix %>%
     !(grepl("^HDD", var1) & grepl("^HDD", var2)) & # exclude HDD
     !(grepl("^CDD", var1) & grepl("^CDD", var2)) # exclude CDD
   ) %>%
-  select(-pair)
+  dplyr::select(-pair)
 
 # ii) Corr matrix (HDD vs. CDD) 
 cor_matrix_dd <- cor_matrix %>%
@@ -86,7 +86,7 @@ cor_matrix_dd <- cor_matrix %>%
     (grepl("^HDD", var1) & grepl("^CDD", var2)) |
       (grepl("^CDD", var1) & grepl("^HDD", var2))
   ) %>%
-  select(-pair)
+  dplyr::select(-pair)
 
 # Analysis of cor_matrix_vars (>= 0.5):
 print(cor_matrix_vars, n = 1000) 
