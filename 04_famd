@@ -1,0 +1,744 @@
+###############################################################################
+
+# Project       : [rehabSpain] 
+# Creation date : 
+# Last update   : 
+# Author        :
+# Institution   : 
+# Last run time : 
+
+# Requirements:
+#   - This script must be in the same directory as:
+#       a) data_clean.rds
+
+###############################################################################
+# 0. PRELIMINARIES ############################################################
+###############################################################################
+
+rm(list = ls(all = TRUE)) # Clear workspace
+Sys.setenv(LANG = "en") # Set system language
+start.time <- Sys.time() # Track start time
+
+# Load required packages & data 
+packages.needed <- c(
+  "here", "rvest", "httr", "dplyr", "ggplot2", "pscl", "AER", "scales",
+  "survey", "gridExtra", "readxl", "effects", "foreign", "aod", "lmtest",
+  "DescTools", "stargazer", "Hmisc", "margins", "plotly", "lme4", "ggeffects",
+  "patchwork", "marginaleffects", "forcats", "rnaturalearth", "sf", "mgcv",
+  "gratia", "glmx", "ResourceSelection", "pROC", "tidyr", "car", "FactoMineR", 
+  "factoextra", "tibble", "ggrepel", "patchwork", "reshape2"
+)
+
+packages.loaded <- installed.packages()
+for (p in packages.needed) {
+  if (!p %in% row.names(packages.loaded)) install.packages(p)
+  library(p, character.only = TRUE)
+}
+
+path <- here() # Define working directory
+setwd(path) # Set wd
+load(file.path("data_clean.RData")) # Load data object
+data <- data_clean
+rm(data)
+
+###############################################################################
+# 1. DEFINE VARIABLES #########################################################
+###############################################################################
+
+# PENDING CHECK WITH FINAL VARIABLES IN THE MODEL !!! ALSO, ROOMS_Z?
+
+model_vars <- c(
+  
+  # climatic
+  "CDD_1723", "HDD_1723",
+  
+  # building
+  "ownership", "detached", "moisturedamage", "pollution",
+  
+  # soc-dems
+  "ln_income_z", "bonosocial", "allhigheducation", "meanageadults_z",
+  "twoadults", "kids", "highpopulation"
+)
+
+subjective_vars <- c(
+  # likert
+  #"enough.temp.summ_c", "enough.temp.wint_c", "satisfac.vivienda_c"
+  "enough.temp.summ_c", "enough.temp.wint_c", "satisfac.vivienda_n"
+)
+
+quali_vars <- c(subjective_vars, "retrofit")
+
+  
+# Summary of model vars:
+data_clean %>%
+  summarise(across(all_of(model_vars),
+                   list(
+                     n    = ~sum(!is.na(.)),
+                     mean = ~mean(., na.rm = TRUE),
+                     sd   = ~sd(., na.rm = TRUE),
+                     min  = ~min(., na.rm = TRUE),
+                     max  = ~max(., na.rm = TRUE)
+                   ),
+                   .names = "{.col}__{.fn}")) %>%
+  pivot_longer(everything(),
+               names_to  = c("variable", "stat"),
+               names_sep = "__",
+               values_to = "value") %>%
+  pivot_wider(names_from = stat, values_from = value) %>%
+  arrange(variable)
+
+# Summary of subjective vars:
+data_clean %>%
+  summarise(across(all_of(subjective_vars),
+                   list(
+                     n    = ~sum(!is.na(.)),
+                     mean = ~mean(., na.rm = TRUE),
+                     sd   = ~sd(., na.rm = TRUE),
+                     min  = ~min(., na.rm = TRUE),
+                     max  = ~max(., na.rm = TRUE)
+                   ),
+                   .names = "{.col}__{.fn}")) %>%
+  pivot_longer(everything(),
+               names_to  = c("variable", "stat"),
+               names_sep = "__",
+               values_to = "value") %>%
+  pivot_wider(names_from = stat, values_from = value) %>%
+  arrange(variable)
+
+
+###############################################################################
+# PREPARE DATA FOR FAMD
+###############################################################################
+
+# 1) Define variables (already done)
+model_vars
+quali_vars
+
+# 2) Define Weights 
+w <- data_clean$weight_capped
+
+# Ensure all var names are found in data_clean
+stopifnot(all(c(model_vars, subjective_vars) %in% names(data_clean)))
+
+
+# PREPARE DATASET FOR FAMD:
+#   - Requires mixed variables: numeric + factors (dummies)
+#   - Dummies 0/1 need to be factorised / transformed into qualitative
+
+
+# Prepare dataset for FAMD (numeric + factors)
+data_famd <- data_clean %>%
+  dplyr::select(all_of(c(model_vars, quali_vars, if(!is.null(w)) "weight"))) %>%
+  mutate(
+    
+    # Convert binary 0/1 to factors
+    across(all_of(model_vars), ~ if(all(na.omit(.) %in% 0:1)) factor(., levels = c(0,1)) else .),
+    
+    # Convert Likert-style variables to factors (round in case of decimals)
+    across(all_of(subjective_vars), ~ factor(round(.)))
+)
+
+str(data_famd) # Check
+
+
+###############################################################################
+# RUN FAMD
+###############################################################################
+
+#   - Active:       model_vars
+#   - Suplementary: 4 qualitatives (retrofit + 3 subjective)
+
+# Get column indices in the FAMD data frame
+idx_active   <- match(model_vars, names(data_famd)) # active variables used in FAMD
+idx_sup_qual <- match(quali_vars, names(data_famd)) # supplementary qualitative variables
+
+# Data that enters FAMD: model_vars + suplementary qualitative ones
+X <- data_famd %>% dplyr::select(all_of(c(model_vars, quali_vars)))
+
+# Suplementary indexes (4 qualitative)
+idx_sup_all <- match(quali_vars, names(X))
+
+# Run FAMD
+famd <- FactoMineR::FAMD(
+  X,
+  ncp     = 10,           # number of dimensions/components to keep
+  sup.var = idx_sup_all,  # retrofit + subjective vars
+  row.w   = w,            # optional weights
+  graph   = FALSE         # avoid auto plotting
+)
+
+summary(famd)
+
+###############################################################################
+# % OF VARIANCE / DIMENSION
+###############################################################################
+
+fviz_eig(famd, addlabels = TRUE, ylim = c(0, 20)) +
+  ggtitle("Variance explained by dimensions") +
+  theme_minimal() # Scree plot
+
+print(round(famd$eig, 2))
+
+#             eigenvalue    % of variance   cumulative % of variance
+# comp 1      1.8358168     14.121668       14.12167
+# comp 2      1.7230785     13.254450       27.37612
+# comp 3      1.4639310     11.261008       38.63713
+# comp 4      1.2956794     9.966765        48.60389
+# comp 5      1.0916810     8.397546        57.00144
+# comp 6      1.0508256     8.083274        65.08471
+# comp 7      0.9114360     7.011046        72.09576
+# comp 8      0.8121071     6.246978        78.34273
+# comp 9      0.7633723     5.872095        84.21483
+# comp 10     0.6102449     4.694192        88.90902
+
+# First three components explain ~39% of the total variance
+# No single dimension dominates: moderate spread of variation across vars
+# rather than one variable group dominating everything
+
+# Cumulative variance:
+#  Dim.1 + Dim.2 + Dim.3 = 38.64%
+#  Dim.1 – Dim.5         = 57.00%
+#  Dim.1 – Dim.10        = 88.91%
+
+
+###############################################################################
+# INSPECT PLOTS (Individuals, Quantitative vars, Qualitative vars)
+###############################################################################
+
+# DIM 1 vs DIM 2
+
+    # Individuals
+    fviz_famd_ind(famd, axes = c(1,2), geom = "point", col.ind = "steelblue",
+                  alpha.ind = 0.4, repel = TRUE)
+    # Quantitative variables
+    fviz_famd_var(famd, axes = c(1,2), col.var = "blue", repel= TRUE)
+    # Qualitative variables
+    fviz_famd_var(famd, axes = c(1,2), "quali", col.quali = "red",
+                  repel = TRUE, labelsize = 4)
+
+# DIM 1 vs DIM 3
+
+    # Individuals
+    fviz_famd_ind(famd, axes = c(1,3), geom = "point", col.ind = "steelblue",
+                  alpha.ind = 0.4, repel = TRUE)
+    # Quantitative variables
+    fviz_famd_var(famd, axes = c(1,3), col.var = "blue", repel = TRUE)
+    # Qualitative variables
+    fviz_famd_var(famd, axes = c(1,3), "quali", col.quali = "red",
+                  repel = TRUE, labelsize = 4)
+
+# DIM 2 vs DIM 3
+
+    # Individuals
+    fviz_famd_ind(famd, axes = c(2,3), geom = "point", col.ind = "steelblue",
+                  alpha.ind = 0.4, repel = TRUE)
+    # Quantitative variables
+    fviz_famd_var(famd, axes = c(2,3), col.var = "blue", repel = TRUE)
+    # Qualitative variables
+    fviz_famd_var(famd, axes = c(2,3), "quali", col.quali = "red",
+                  repel = TRUE, labelsize = 4)
+
+
+# AGGREGATED PLOTS:
+
+dims_list   <- list(c(1,2), c(1,3), c(2,3))
+dims_titles <- c("Dim1 vs Dim2", "Dim1 vs Dim3", "Dim2 vs Dim3")
+
+    # Individuals
+    wrap_plots(lapply(seq_along(dims_list), function(i) {
+      fviz_famd_ind(famd, axes = dims_list[[i]], geom = "point", 
+                    col.ind = "steelblue", alpha.ind = 0.4, repel = TRUE) +
+        ggtitle(dims_titles[i])
+    })) + plot_annotation(title = "Individuals")
+
+    # Quantitative variables
+    wrap_plots(lapply(seq_along(dims_list), function(i) {
+      fviz_famd_var(famd, axes = dims_list[[i]], col.var = "blue", repel = TRUE) +
+        ggtitle(dims_titles[i])
+    })) + plot_annotation(title = "Quantitative Variables")
+    
+    # Qualitative variables
+    wrap_plots(lapply(seq_along(dims_list), function(i) {
+      fviz_famd_var(famd, axes = dims_list[[i]], "quali", col.quali = "red", 
+                    repel = TRUE, labelsize = 4) +
+        ggtitle(dims_titles[i])
+    })) + plot_annotation(title = "Qualitative Variables")
+
+
+
+###############################################################################
+# COORDINATES OF VARIABLES ON DIMENSIONS
+###############################################################################
+
+round(famd$var$coord, 3) # Check matrix
+data_melt <- melt(famd$var$coord) # Convert to long format
+# data_melt <- melt(famd$var$coord[, 1:5]) # Select which dimensions
+colnames(data_melt) <- c("Variable", "Dimension", "Value") # Add colnames
+
+# Plot heatmap
+ggplot(data_melt, aes(x    = Dimension, 
+                      y    = Variable, 
+                      fill = Value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "FAMD variable contributions", 
+       x     = "Dimension", 
+       y     = "Variable", 
+       fill  = "Coord")
+
+# DIMENSION 1: HOUSEHOLD COMPOSITION & SOCIO-ECONOMIC STATUS?
+#   Age, Kids, Income, Twoadults
+
+# DIMENSION 2: CLIMATE EXPOSURE AND HOUSING TYPE
+#   HDD_1723, Detached, Highpopulation, Kids, CDD_1723
+
+# DIMENSION 3: HOUSING OWNERSHIP AND LOCATION
+#   Ownership, Detached, Highpopulation
+
+# DIMENSION 4: VULNERABILITY TO CLIMATE CONDITIONS???
+#   CDD, HDD, moisturedamage
+
+# ETC (to redo when final model is done) 
+
+# Other useful insights:
+# Meanageadults affects heavily on Dim1 (0.502) --> demographic dimension
+# Income contributes both to Dim1 (0.29) and Dim 3 (0.46), showing income
+# affects both demographics and tenure
+# CDD/HDD are more important in Dim2, again linking to climate/housing
+
+###############################################################################
+# VARIABLE CONTRIBUTIONS IN EACH DIMENSION
+##############################################################################
+
+var_coord   <- famd$var$coord
+var_contrib <- apply(var_coord^2, 2, function(x) 100 * x / sum(x))
+round(var_contrib, 2)
+        
+# Top 3 variables contributing to Dim1
+top_dim1 <- sort(var_contrib[,1], decreasing = TRUE)[1:3]
+print(top_dim1)
+
+# Top 3 variables contributing to Dim2
+top_dim2 <- sort(var_contrib[,2], decreasing = TRUE)[1:3]
+print(top_dim2)
+
+# Top 3 variables contributing to Dim3
+top_dim3 <- sort(var_contrib[,3], decreasing = TRUE)[1:3]
+print(top_dim3)
+
+
+# A) PLOTS OF EACH DIMENSION:
+print(p1 <- fviz_contrib(famd, choice = "var", axes = 1) + ggtitle("Dim1"))
+print(p2 <- fviz_contrib(famd, choice = "var", axes = 2) + ggtitle("Dim2"))
+print(p3 <- fviz_contrib(famd, choice = "var", axes = 3) + ggtitle("Dim3"))
+grid.arrange(p1, p2, p3, ncol = 3)
+
+# B) PLOTS USING DIMENSION PAIRS:
+print(p4 <- plot(famd, choix = "var", axes = c(1,2), main = "Dim1 vs Dim2")) #1vs2
+print(p5 <- plot(famd, choix = "var", axes = c(1,3), main = "Dim1 vs Dim3")) #1vs3
+print(p6 <- plot(famd, choix = "var", axes = c(2,3), main = "Dim2 vs Dim3")) #2vs3
+grid.arrange(p4, p5, p6, ncol = 3)
+
+
+
+################################################################################
+# VARIABLE REPRESENTATION (COS^2)
+################################################################################
+
+library(reshape2)
+var_cos2 <- famd$var$cos2
+data_melt <- melt(var_cos2)
+colnames(data_melt) <- c("Variable", "Dimension", "Cos2")
+ggplot(data_melt, aes(x = Dimension, y = Variable, fill = Cos2)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal() +
+  labs(title = "Variable Representation (Cos²)",
+       x = "Dimension",
+       y = "Variable")
+
+
+cos2
+coord.sup
+cos2.sup
+
+
+
+
+################ ESTO ES MUY BUENO:
+fviz_famd_ind(famd,
+              axes = c(1,2),
+              geom = "point",
+              habillage = X$detached,  # replace 'region' with your categorical variable
+              addEllipses = TRUE,
+              palette = "jco",
+              repel = TRUE) +
+  ggtitle("Individuals by tenure")
+
+fviz_famd_ind(famd,
+              axes = c(1,3),
+              geom = "point",
+              habillage = X$allhigheducation,  # replace 'region' with your categorical variable
+              addEllipses = TRUE,
+              palette = "jco",
+              repel = TRUE) +
+  ggtitle("Individuals by Region")
+
+
+## *The results are available in the following objects:
+## 
+##   name          description                             
+## 1 "$eig"        "eigenvalues and inertia"               
+## 2 "$var"        "Results for the variables"             
+## 3 "$ind"        "results for the individuals"           
+## 4 "$quali.var"  "Results for the qualitative variables" 
+## 5 "$quanti.var" "Results for the quantitative variables"
+
+# how to interpret?
+# famd$quali.var$coord    # coordinates of categories on each dimension
+# famd$quali.var$cos2     # quality of representation (cos²)
+# famd$quali.var$v.test   # the V-test values
+ 
+
+# El círculo de correlaciones solo para variables cuantitativas:
+# Solo incluye las variables continuas 
+# (CDD_1723, HDD_1723, ln_income_z, meanageadults_z) 
+# y además te muestra en azul las suplementarias cuantitativas.
+# Las flechas representan correlaciones de cada variable con Dim1 y Dim2:
+# Dirección de la flecha ≈ dirección de correlación (+ o -).
+# Longitud de la flecha ≈ qué tan bien está representada por el plano (cos²).
+# Ángulo entre flechas ≈ correlación entre variables.
+
+summary(famd)
+# 
+# 
+# Call:
+#   FactoMineR::FAMD(base = X, ncp = 10, graph = TRUE, sup.var = idx_sup_all,  
+#                    row.w = if (is.null(w)) NULL else w) 
+# 
+# 
+# Eigenvalues
+# Dim.1  Dim.2  Dim.3  Dim.4  Dim.5  Dim.6  Dim.7  Dim.8  Dim.9 Dim.10
+# Variance              1.837  1.712  1.469  1.288  1.094  1.047  0.911  0.814  0.764  0.610
+# % of var.            14.129 13.171 11.302  9.908  8.414  8.051  7.006  6.258  5.873  4.695
+# Cumulative % of var. 14.129 27.300 38.602 48.511 56.924 64.976 71.982 78.240 84.113 88.808
+# 
+# Individuals (the 10 first)
+# Dist    Dim.1    ctr   cos2    Dim.2    ctr   cos2    Dim.3    ctr   cos2  
+# 1                   |  4.551 |  0.729  0.001  0.026 |  1.862  0.009  0.167 |  1.049  0.003  0.053 |
+#   2                   |  3.892 |  0.803  0.001  0.043 |  0.384  0.000  0.010 |  0.563  0.000  0.021 |
+#   3                   |  3.136 | -1.634  0.010  0.271 |  1.736  0.012  0.306 |  0.998  0.004  0.101 |
+#   4                   |  3.400 | -0.528  0.001  0.024 |  1.646  0.010  0.234 |  0.137  0.000  0.002 |
+#   5                   |  3.213 | -0.167  0.000  0.003 |  1.720  0.011  0.286 |  0.537  0.001  0.028 |
+#   6                   |  3.348 |  0.341  0.001  0.010 |  2.710  0.036  0.655 |  0.355  0.001  0.011 |
+#   7                   |  4.035 |  0.357  0.001  0.008 |  2.523  0.037  0.391 | -0.249  0.000  0.004 |
+#   8                   |  3.619 | -0.060  0.000  0.000 |  1.426  0.014  0.155 | -1.737  0.024  0.230 |
+#   9                   |  3.114 |  1.920  0.010  0.380 |  0.963  0.003  0.096 |  1.441  0.007  0.214 |
+#   10                  |  3.427 |  1.223  0.008  0.127 |  2.380  0.031  0.482 |  1.119  0.008  0.107 |
+#   
+#   Continuous variables
+#                         Dim.1    ctr   cos2    Dim.2    ctr   cos2    Dim.3    ctr   cos2  
+#   CDD_1723            | -0.040  0.089  0.002 | -0.519 15.735  0.269 | -0.325  7.190  0.106 |
+#   HDD_1723            |  0.117  0.743  0.014 |  0.598 20.891  0.358 |  0.320  6.974  0.102 |
+#   ln_income_z         |  0.531 15.372  0.282 |  0.074  0.318  0.005 |  0.473 15.252  0.224 |
+#   meanageadults_z     | -0.694 26.230  0.482 |  0.363  7.700  0.132 |  0.150  1.541  0.023 |
+#   
+#   Supplementary continuous variables
+#                          Dim.1   cos2    Dim.2   cos2    Dim.3   cos2  
+#   enough.temp.summ_c  | -0.002  0.000 |  0.044  0.002 |  0.203  0.041 |
+#   enough.temp.wint_c  |  0.084  0.007 |  0.125  0.016 |  0.212  0.045 |
+#   satisfac.vivienda_c | -0.081  0.007 |  0.044  0.002 |  0.153  0.023 |
+#   
+#   Categories (the 10 first)
+#                           Dim.1       ctr      cos2    v.test       Dim.2       ctr      cos2
+# 0                   |    -0.259     1.530     0.202 -1487.410 |    -0.190     0.947     0.109
+# 1                   |     0.862     5.092     0.202  1487.410 |     0.632     3.152     0.109
+# 0.1                 |     0.063     0.106     0.038   627.091 |     0.085     0.223     0.069
+# 1.1                 |    -0.633     1.071     0.038  -627.091 |    -0.855     2.251     0.069
+# 0.2                 |     0.375     2.790     0.222  1677.458 |     0.473     5.096     0.352
+# 1.2                 |    -0.757     5.632     0.222 -1677.458 |    -0.954    10.288     0.352
+# 0.3                 |    -0.516     3.558     0.176 -1471.300 |    -0.665     6.799     0.293
+# 1.3                 |     0.424     2.921     0.176  1471.300 |     0.546     5.583     0.293
+# 0.4                 |    -0.608     7.316     0.538 -2708.903 |     0.413     3.884     0.248
+# 1.4                 |     1.218    14.646     0.538  2708.903 |    -0.827     7.775     0.248
+# v.test       Dim.3       ctr      cos2    v.test  
+# 0                   -1129.941 |     0.066     0.156     0.013   424.506 |
+#   1                    1129.941 |    -0.220     0.518     0.013  -424.506 |
+#   0.1                   877.868 |     0.059     0.147     0.033   659.292 |
+#   1.1                  -877.868 |    -0.595     1.480     0.033  -659.292 |
+#   0.2                  2188.977 |    -0.376     4.371     0.222 -1877.988 |
+#   1.2                 -2188.977 |     0.758     8.824     0.222  1877.988 |
+#   0.3                 -1963.837 |     0.557     6.488     0.206  1777.018 |
+#   1.3                  1963.837 |    -0.458     5.327     0.206 -1777.018 |
+#   0.4                  1905.579 |    -0.137     0.580     0.027  -682.165 |
+#   1.4                 -1905.579 |     0.274     1.161     0.027   682.165 |
+#   
+#   Supplementary categories
+#                          Dist       Dim.1    cos2   v.test      Dim.2     cos2   v.test      Dim.3  cos2   v.test  
+# retrofit_0          |    0.085 |   -0.033    0.155 -255.564 |   -0.046    0.295 -365.484 |   -0.052   0.374 -443.772 |
+# retrofit_1          |    0.501 |    0.197    0.155  255.564 |    0.272    0.295  365.484 |    0.306   0.374  443.772 |
+# 
+# 
+# 1) Qué están capturando Dim 1 y Dim 2
+# Dim 1 (14.13% var) las contribuciones fuertes a Dim 1 (entre las cuantitativas activas) son:
+#   meanageadults_z = -0.694 (ctr 26.23%, cos2 0.482) → muy dominante
+#   ln_income_z = +0.531 (ctr 15.37%, cos2 0.282)
+#   Dim 1 ≈ “perfil socioeconómico/etario” (jóvenes+ingreso alto vs mayores+ingreso bajo).
+# 
+# Dim 2 (13.17% var)
+# dominan claramente las variables climáticas:
+#   HDD_1723 = +0.598 (ctr 20.89%, cos2 0.358)
+#   CDD_1723 = -0.519 (ctr 15.74%, cos2 0.269)
+#    Dim 2 contrapone:más HDD inviernos más fríos / más necesidad de calefacción
+#                     más CDD veranos más calurosos / más necesidad de air acondicionado
+# 
+# 2) Dónde cae retrofit=1 (suplementaria)
+#   retrofit_1: Dim1 = +0.197, Dim2 = +0.272, Dim3 = +0.306
+#   retrofit_0: simétrico negativo (como es normal)
+#   retrofit=1 tiende a localizarse en el cuadrante:
+#   
+#   Dim1 positivo → asociado a mayor ingreso / menor edad
+#   Dim2 positivo → asociado a zonas más frías (más HDD)
+# 
+# 3) Las 3 variables adicionales (suplementarias) 
+# enough.temp.summ_c: Dim1 ≈ -0.002 (cos2 0.000), Dim2 ≈ +0.044 (cos2 0.002), Dim3 ≈ +0.203 (cos2 0.041)
+# enough.temp.wint_c: Dim1 ≈ +0.084 (cos2 0.007), Dim2 ≈ +0.125 (cos2 0.016), Dim3 ≈ +0.212 (cos2 0.045)
+# satisfac.vivienda_c: Dim1 ≈ -0.081 (cos2 0.007), Dim2 ≈ +0.044 (cos2 0.002), Dim3 ≈ +0.153 (cos2 0.023)
+# En Dim 1 y Dim 2 estas tres variables están muy cerca del origen y con cos2 bajísimos 
+# En cambio, aparecen algo más alineadas con Dim 3 (aunque sigue siendo moderado: cos2 ~ 0.02–0.045). 
+
+#
+# ¿Cómo cotribuyen las cualitativas activas a las dimensiones?
+#
+# Ver qué componentes existen
+names(res_famd)
+
+# Intentar localizar coordenadas de categorías cualitativas activas
+candidates <- c("quali.var", "quali", "var")
+for (nm in candidates) {
+  if (!is.null(res_famd[[nm]]) && !is.null(res_famd[[nm]]$coord)) {
+    cat("\nEncontrado:", nm, "->", nrow(res_famd[[nm]]$coord), "filas\n")
+    print(head(rownames(res_famd[[nm]]$coord), 10))
+  }
+}
+
+get_quali_coord <- function(res){
+  if (!is.null(res$quali.var) && !is.null(res$quali.var$coord)) return(res$quali.var$coord)
+  if (!is.null(res$quali)     && !is.null(res$quali$coord))     return(res$quali$coord)
+  if (!is.null(res$var)       && !is.null(res$var$coord))       return(res$var$coord)
+  stop("No encuentro coordenadas de cualitativas activas en res_famd.")
+}
+
+top_categories <- function(dim, n=12){
+  Q <- as.data.frame(get_quali_coord(res_famd)) %>%
+    tibble::rownames_to_column("cat")
+  
+  # columna de dimensión (Dim.1 o Dim 1)
+  dim_col <- names(Q)[grepl(paste0("^Dim[\\. ]", dim, "$"), names(Q))]
+  if (length(dim_col) == 0) stop("No encuentro la columna de la dimensión en las coordenadas.")
+  dim_col <- dim_col[1]
+  
+  Q %>%
+    arrange(desc(abs(.data[[dim_col]]))) %>%
+    select(cat, !!dim_col) %>%
+    head(n)
+}
+
+cat("\n--- DIM 1 categorías extremas ---\n")
+print(top_categories(1, 12))
+
+cat("\n--- DIM 2 categorías extremas ---\n")
+print(top_categories(2, 12))
+
+cat("\n--- DIM 3 categorías extremas ---\n")
+print(top_categories(3, 12))
+
+# Las cualitativas activas (factores) entran en este orden:
+# allhigheducation → categorías 0 y 1
+# bonosocial → 0.1 y 1.1
+# detached → 0.2 y 1.2
+# highpopulation → 0.3 y 1.3
+# kids → 0.4 y 1.4
+# moisturedamage → 0.5 y 1.5
+# ownership → 0.6 y 1.6
+# pollution → 0.7 y 1.7
+# twoadults → 0.8 y 1.8
+# 
+# Así, por ejemplo:
+# 1.2 = detached=1, 0.2 = detached=0
+# 
+# Interpretación
+# Dim 1 (14.1%) — “Ciclo de vida familiar / recursos + tipología urbana”
+# 
+# Continuas
+#   ln_income_z carga positivo (más ingreso hacia Dim1 +)
+#   meanageadults_z carga negativo (mayor edad hacia Dim1 −)
+# Cualitativas 
+#   Lado positivo (Dim1 +):
+#   kids=1 (1.4 = +1.218)
+#   allhigheducation=1 (1 = +0.862)
+#   twoadults=1 (1.8 = +0.552)
+#   highpopulation=1 (1.3 = +0.424)
+#   detached=0 (0.2 = +0.375)
+# 
+# Lado negativo (Dim1 −):
+#   detached=1 (1.2 = −0.757)
+#   bonosocial=1 (1.1 = −0.633)
+#   kids=0 (0.4 = −0.608)
+#   twoadults=0 (0.8 = −0.594)
+#   highpopulation=0 (0.3 = −0.516)
+#  
+#   Dim1 opone un perfil familiar-urbano 
+#   (dos adultos, con niños, más educación, más urbano) 
+#   en el lado positivo, frente a un perfil más periférico,
+#   con mayor presencia de bono social y menos estructura “familia nuclear” en el 
+#   lado negativo. Este eje además está muy alineado con ingreso (positivo) y 
+#   edad media (negativo).
+# 
+# Dim 2 (13.2%) — “Clima + urbanidad/tipología”
+# 
+# Continuas:
+#   HDD_1723 positivo (más frío/invierno severo hacia Dim2 +)
+#   CDD_1723 negativo (más calor/verano severo hacia Dim2 −)
+# 
+# Cualitativas extremas en Dim2:
+# Lado positivo (Dim2 +, más HDD / más frío):
+#   allhigheducation=1 (1 = +0.632)
+#   highpopulation=1 (1.3 = +0.546)
+#   detached=0 (0.2 = +0.473)
+#   kids=0 (0.4 = +0.413)
+#  Lado negativo (Dim2 −, más CDD / más calor):
+#   detached=1 (1.2 = −0.954)
+#   bonosocial=1 (1.1 = −0.855)
+#   kids=1 (1.4 = −0.827)
+#   moisturedamage=1 (1.5 = −0.811)
+#   highpopulation=0 (0.3 = −0.665)
+# 
+#  Dim2 es principalmente un eje climático (frío vs calor), 
+#  y co-varía con forma urbana: el lado “frío” aparece más asociado a entornos 
+#  urbanos/no detached y mayor educación, mientras que el lado “calor” se 
+#  asocia más a vivienda unifamiliar (detached), menor densidad, bono social, 
+#  presencia de niños y daños por humedad.
+# 
+# (Esto no significa causalidad!!!!! Es patrón conjunto en la muestra.)
+# 
+# Dim 3 (11.3%) — “Calidad/condición residencial y tenencia + confort/satisfacción”
+# 
+# Continuas:
+#   ln_income_z positivo (0.473)
+#   HDD_1723 positivo (0.320)
+#   CDD_1723 negativo (−0.325)
+# Cualitativas más extremas en Dim3:
+#   Lado positivo (Dim3 +):
+#     detached=1 (1.2 = +0.758)
+#     highpopulation=0 (0.3 = +0.557)
+#     twoadults=1 (1.8 = +0.449)
+#     ownership=1 (1.6 = +0.396)
+#     kids=1 (1.4 = +0.274)
+# 
+# Lado negativo (Dim3 −):
+#     ownership=0 (0.6 = −1.209)
+#     pollution=1 (1.7 = −1.033)
+#     bonosocial=1 (1.1 = −0.595)
+#     twoadults=0 (0.8 = −0.484)
+#     highpopulation=1 (1.3 = −0.458)
+#     moisturedamage=1 (1.5 = −0.378)
+# 
+# Las 3 suplementarias (enough.temp.*_c, satisfac.vivienda_c) estaban positivas 
+# en Dim3, y retrofit_1 también está positivo en Dim3.!!!!
+# 
+#   Dim3 separa un perfil de mejor situación residencial/tenencia 
+#  (propietarios, vivienda unifamiliar, baja densidad, hogares de dos adultos/familias) 
+#  en el lado positivo, frente a un perfil más vulnerable/urbano 
+#  (alquiler, contaminación, bono social, humedad, alta densidad) en el lado negativo. 
+#  Este eje es además el que más se alinea (aunque moderadamente) 
+#  con la idea de relacion de indicadores de confort térmico y satisfacción, 
+#  con el retrofit=1 que tiende a situarse en el lado positivo.
+# 
+# 
+# 
+# Resumen de autovalores (para elegir dimensiones)
+eig <- res_famd$eig
+print(eig)
+
+retro <- as.data.frame(res_famd$quali.sup$coord) %>%
+  rownames_to_column("cat") %>%
+  filter(grepl("^retrofit_", cat))
+
+# ---------------------------------------------------------------------------
+# 4) Gráficos principales
+# ---------------------------------------------------------------------------
+
+# Mapa de variables activas (mixto)
+# Nota: fviz_famd_var puede intentar etiquetar miles de modalidades y romper el dibujo.
+# Mostramos solo las 30 variables/modalidades con mayor contribución para evitar solapes/errores.
+p_var <- tryCatch({
+  factoextra::fviz_famd_var(
+    res_famd,
+    repel = TRUE,
+    select.var = list(contrib = 30)
+  ) +
+    ggtitle("FAMD - Variables activas (cuanti + quali) | Top 30 contrib.")
+}, error = function(e) {
+  message("Se omite el mapa de variables (fviz_famd_var) por error: ", e$message)
+  NULL
+})
+if (!is.null(p_var)) print(p_var)
+
+# Ese es un mapa de coordenadas de variables en FAMD 
+# (mezcla cuantitativas y cualitativas/dummies):
+# Rojo: variables activas (las 13 que construyen el espacio).
+# Verde: modalidades/categorías de variables activas; las suplementarias van aparte en res_famd$quali.sup (tratadas como factores).
+
+# Dim1 (horizontal)
+# Hacia la derecha cargan fuerte meanageadults_z, kids y ln_income_z (rojas).
+# Dim1 está recogiendo un gradiente socio-demográfico/recursos 
+# 
+# Dim2 (vertical)
+# Arriba cargan HDD_1723 (muy arriba) y también CDD_1723  más detached y highpopulation.
+#  En summary(res_famd) para Dim2, 
+# HDD era positivo y CDD negativo; si aquí ambos aparecen “arriba” 
+# es porque fviz_famd_var para FAMD puede estar mostrando coordenadas 
+# (no necesariamente el círculo de correlaciones clásico) 
+# Dim2 está muy asociada al componente climático (HDD, CDD) 
+# y también a tipo de vivienda/entorno.
+
+
+# (C) Proyección de las variables suplementarias cualitativas
+# En FactoMineR, las suplementarias cualitativas quedan en res_famd$quali.sup
+# (incluye retrofit y las 3 variables tipo Likert tratadas como factor)
+
+# --- Suplementarias cualitativas (retrofit + Likert) ---
+supqual <- as.data.frame(res_famd$quali.sup$coord) |>
+  rownames_to_column("cat")
+
+coord_cols2 <- setdiff(names(supqual), "cat")
+names(supqual)[match(coord_cols2[1], names(supqual))] <- "Dim.1"
+names(supqual)[match(coord_cols2[2], names(supqual))] <- "Dim.2"
+
+ggplot(supqual, aes(x = Dim.1, y = Dim.2, label = cat)) +
+  geom_hline(yintercept = 0) + geom_vline(xintercept = 0) +
+  geom_point() +
+  geom_text_repel() +
+  coord_equal() +
+  labs(title = "FAMD - Suplementarias cualitativas", x = "Dim 1", y = "Dim 2")
+
+
+# (Opcional) Proyección de categorías suplementarias en Dim2-Dim3
+# (útil si Dim3 también es interpretativamente relevante)
+if ("Dim.3" %in% names(supqual)) {
+  ggplot(supqual, aes(x = Dim.2, y = Dim.3, label = cat)) +
+    geom_hline(yintercept = 0) + geom_vline(xintercept = 0) +
+    geom_point() +
+    geom_text_repel() +
+    coord_equal() +
+    labs(title = "FAMD - Suplementarias cualitativas (Dim2 vs Dim3)",
+         x = "Dim 2", y = "Dim 3")
+}
+
+###############################################################################
+
+end.time <- Sys.time() # Track start time
+print(execution.time <- end.time - start.time)
