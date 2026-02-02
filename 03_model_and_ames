@@ -1,0 +1,742 @@
+###############################################################################
+
+# Project       : [rehabSpain] [3] MODELING & POST-ESTIMATION CHECKS
+# Creation date : 20/11/2025
+# Last update   : 02/02/2026
+# Author        : Mercè Amich (merce.amich@ehu.eus)
+# Institution   : UPV/EHU, BC3
+# Last run time : <1 min.
+#
+# Script Overview:
+#   This script:
+#     -    
+# Requirements:
+#   - This script must be in the same directory as:
+#       a) data.rds
+
+###############################################################################
+# 0. PRELIMINARIES ############################################################
+###############################################################################
+
+rm(list = ls(all = TRUE)) # Clear workspace
+Sys.setenv(LANG = "en") # Set system language
+start.time <- Sys.time() # Track start time
+
+# Load required packages & data 
+packages.needed <- c(
+  "here", "rvest", "httr", "dplyr", "ggplot2", "pscl", "AER", "scales",
+  "survey", "gridExtra", "readxl", "effects", "foreign", "aod", "lmtest",
+  "DescTools", "stargazer", "Hmisc", "margins", "plotly", "lme4", "ggeffects",
+  "patchwork", "marginaleffects", "forcats", "rnaturalearth", "sf", "mgcv",
+  "gratia", "glmx", "ResourceSelection", "pROC", "tidyr", "car", "boot"
+)
+
+packages.loaded <- installed.packages()
+for (p in packages.needed) {
+  if (!p %in% row.names(packages.loaded)) install.packages(p)
+  library(p, character.only = TRUE)
+}
+
+path <- here() # Define working directory
+setwd(path) # Set wd
+load(file.path("data.RData")) # Load data object
+
+###############################################################################
+# 0. INDEX ####################################################################
+###############################################################################
+
+# This needs to be done as bulletpoints of all what script does
+
+print("\n=== ASSESSMENT: HETERO → FAMD BRIDGE ===\n")
+
+print("YES - This is EXCELLENT structure for your paper. Here's why:\n")
+
+print("ARGUMENT 1: Logical progression")
+print("  - Start with OUTCOME (retrofit decision) → LOGIT")
+print("  - Discover heteroskedasticity (unexplained variance)")
+print("  - Diagnose source: unobserved confounders in dissatisfied group")
+print("  - Use FAMD to REVEAL these hidden dimensions")
+print("  - This is natural causal flow: theory → empirics → deep dive\n")
+
+print("ARGUMENT 2: Methodological motivation")
+print("  - Logit finds ASSOCIATIONS with retrofit")
+print("  - Logit heteroskedasticity asks: WHY is variation heterogeneous?")
+print("  - FAMD asks: WHAT underlying dimensions create this variation?")
+print("  - FAMD reveals LATENT STRUCTURE behind the heterogeneity")
+print("  → This transforms heteroskedasticity from PROBLEM into INSIGHT\n")
+
+print("ARGUMENT 3: Addresses reviewer questions")
+print("  - Reviewer: 'Why robust SEs? What's causing heteroskedasticity?'")
+print("  - Your answer: 'Because unobserved heterogeneity in preferences;")
+print("              we reveal these via FAMD'")
+print("  - Makes hetero diagnosis COMPLETE, not just methodological fix\n")
+
+print("ARGUMENT 4: Strengthens paper narrative")
+print("  - Weak narrative: 'We use logit + robust SEs for heteroskedasticity'")
+print("  - Strong narrative: 'Logit reveals heterogeneity in retrofit choices;")
+print("               stratified analysis shows it concentrates in dissatisfied;")
+print("               FAMD reveals the latent preference dimensions driving")
+print("               this heterogeneity'")
+print("  → Shows sophisticated understanding of data\n")
+
+print("ARGUMENT 5: Justifies FAMD methodologically")
+print("  - Why FAMD instead of just more regression?")
+print("  - Because heteroskedasticity suggests LATENT DIMENSIONS")
+print("  - Not just unobserved confounders—hidden STRUCTURE")
+print("  - FAMD reveals dimensions that logit can't capture\n")
+
+
+###############################################################################
+# 1. DEFINE & CHECK CANDIDATE VARIABLES #######################################
+###############################################################################
+
+# Dependent variable: retrofit (0,1) ----
+
+table(data$retrofit)
+round(prop.table(table(data$retrofit))*100, 2) # 15.39% (1)
+sum(is.na(data$retrofit)) # 0 NA's
+is.numeric(data$retrofit) # Guarantee is numeric
+
+# Independent variables ----
+
+# i) Climatic variables
+table(data$zc) # Climatic zones (severity winter; heating needs)
+hist(data$CDD_1723) # Cooling Degree Days (summer severity; cooling needs)
+hist(data$HDD_1723) # Heating Degree Days (winter severity; heating needs)
+
+# ii) Building variables
+table(data$ownership)
+
+table(data$detachedindep)
+table(data$semidetached)
+table(data$detached)
+
+table(data$indivheating)
+table(data$portableheating)  
+
+table(data$electricity_heat) 
+table(data$gas_heat) 
+table(data$renewable_heat) 
+
+table(data$moisturedamage)
+
+table(data$pollution)   
+table(data$naturalight)
+table(data$noises) 
+
+hist(data$rooms_z)
+
+# Socio-demographic variables
+hist(data$ln_income_z) 
+table(data$bonosocial) 
+table(data$allhigheducation) 
+hist(data$meanageadults_z) 
+table(data$twoadults) 
+table(data$kids) 
+table(data$highpopulation) 
+
+# Endogenous variables ----
+
+table(data$enough.temp.summ) 
+table(data$enough.temp.wint) 
+table(data$satisfac.vivienda) # the original
+table(data$satisfac.vivienda_n) # this is the good one 
+
+###############################################################################
+# 3. DATA VALIDATION & NORMALISE/CAP WEIGHTS ##################################
+###############################################################################
+
+# a) Define required variables
+
+required_vars <- c(
+  "retrofit", 
+  "zc", "CDD_1723", "HDD_1723",
+  "ownership", "detachedindep", "semidetached", "detached",
+  "indivheating", "portableheating", "electricity_heat", 
+  "gas_heat", "renewable_heat", "moisturedamage", "pollution", 
+  "naturalight", "noises", "rooms_z",
+  "ln_income_z", "bonosocial", "allhigheducation", "meanageadults_z",
+  "twoadults", "kids", "highpopulation",
+  "enough.temp.summ", "enough.temp.wint", "satisfac.vivienda_n"
+)
+
+# b) Diagnose NA's 
+
+missing_counts <- sapply(data[, required_vars], function(x) sum(is.na(x)))
+missing_pct    <- 100 * missing_counts / nrow(data)
+
+missing_table <- data.frame(
+  variable    = names(missing_counts),
+  n_missing   = as.integer(missing_counts),
+  pct_missing = round(missing_pct, 1)
+)
+
+missing_table <- missing_table[order(-missing_table$pct_missing), ]
+print(missing_table, row.names = FALSE)
+
+# !!!! there are many (13%) NA's in heat systems
+# they cannot be part of our model to avoid identification issues
+
+required_vars <- setdiff(required_vars, c("electricity_heat", "gas_heat", "renewable_heat"))
+
+# c) Remove incomplete cases
+n_total       <- nrow(data)
+weights_total <- sum(data$weight, na.rm = TRUE)
+
+data_clean    <- data[complete.cases(data[, required_vars]), ] # keep complete cases
+
+# Obs removed in dataset
+print(n_removed   <- n_total - nrow(data_clean)) # 1217 obs removed
+print(pct_removed <- 100 * n_removed / n_total) # 4.56% removed 
+
+# Weighted percentage removed: 4.05%
+weights_clean_total        <- sum(data_clean$weight, na.rm = TRUE)
+print(pct_removed_weighted <- 100 * (weights_total - weights_clean_total) / weights_total)
+nrow(data_clean) # Sample size after cleaning
+
+# d) Treat survey weights: normalisation
+weights_clean <- data_clean$weight # extract them
+summary(weights_clean) # clearly right-skewed distribution
+hist(weights_clean)
+
+# Normalise weights to have mean 1 (sum = n) to preserve scale comparability
+# and avoid numerical dominance of extreme weights in nonlinear estimation
+
+weights_normalised <- weights_clean / mean(weights_clean, na.rm = TRUE)
+summary(weights_normalised)
+hist(weights_normalised)
+
+# Cap extreme normalized weights to improve numerical stability and robustness
+quantile(weights_normalised,  # First, inspect quantiles of weights_normalised:
+         probs = c(0.95, 0.99, 0.995, 0.999),
+         na.rm = TRUE)
+
+# (99th percentile = 4.38; 99.5th percentile = 5.50).
+
+# To limit the influence of a very small number of observations
+# with extreme weights, we cap them at 5 (99.5% quantile aprox)
+
+# Weights are then renormalized to have mean 1 (sum = n) to
+# preserve scale comparability and stability in nonlinear
+# estimation and post-estimation simulations
+
+weights_capped <- pmin(weights_normalised, 5) # cap them at 5
+weights_capped <- weights_capped / mean(weights_capped, na.rm = TRUE) # renormalise
+
+# Check:
+summary(weights_capped)
+quantile(weights_capped, probs = c(0.95, 0.99, 0.995, 0.999), na.rm = TRUE)
+hist(weights_capped, breaks = 50)
+
+# Integrate them back to data clean
+data_clean <- data_clean %>% dplyr::mutate(weight_capped = weights_capped)
+
+###############################################################################
+# 3. DEFINE LOGIT MODEL FORMULA ###############################################
+###############################################################################
+
+# Mean equation variables:
+#mean_vars <- paste(
+vars <- c(
+  "CDD_1723", "HDD_1723",
+  "ownership", "detached",
+  "moisturedamage", "pollution", "naturalight", "noises", "rooms_z",
+  "ln_income_z", "bonosocial", "allhigheducation", "meanageadults_z",
+  "twoadults", "kids", "highpopulation"
+)
+
+# Collapse into a single string for the formula
+vars_formula <- paste(vars, collapse = " + ")
+
+# i still don't know if we need the centered variables?
+data_clean$enough.temp.summ_c  <- data_clean$enough.temp.summ    - mean(data_clean$enough.temp.summ)
+data_clean$enough.temp.wint_c  <- data_clean$enough.temp.wint    - mean(data_clean$enough.temp.wint)
+data_clean$satisfac.vivienda_c <- data_clean$satisfac.vivienda_n - mean(data_clean$satisfac.vivienda_n)
+
+# Endogenous variables:
+#scale_vars <- paste(
+endo_vars <- paste(
+  "enough.temp.summ", "enough.temp.wint", "satisfac.vivienda",
+  sep = " + "
+)
+
+# Endogenous centered variables (will i need them?):
+#scale_vars_c <- paste(
+endo_centered <- paste(
+  "enough.temp.summ_c", "enough.temp.wint_c", "satisfac.vivienda_c",
+  sep = " + "
+)
+
+###############################################################################
+# 4. MODEL ESTIMATION #########################################################
+###############################################################################
+
+summary(logit <- glm(formula = as.formula(paste("retrofit ~", vars_formula)),
+             family  = binomial(link = "logit"),
+             data    = data_clean,
+             weights = weights_normalised)
+)
+
+AIC(logit)
+BIC(logit)
+logLik(logit)
+logit$converged
+
+###############################################################################
+# 6. POST-ESTIMATION CHECKS ###################################################
+###############################################################################
+
+# Condition number (should be <30)
+X           <- model.matrix(logit)
+eigenvals   <- eigen(t(X) %*% X)$values
+cond_number <- sqrt(max(eigenvals) / min(eigenvals))
+print(paste("Condition number:", round(cond_number, 2))) # 6.92
+
+# VIFs
+model.matrix(logit) |> attr("assign") |> table() # GVIF not needed
+car::vif(logit) # acceptable values
+
+# Bootstrap parameter sensitivity
+
+# a) Build the modelling data frame explicitly
+data_boot <- data.frame(
+  retrofit = data_clean$retrofit,
+  data_clean[, all.vars(as.formula(paste("retrofit ~", vars_formula)))[-1],
+             drop = FALSE],
+  weights = weights_normalised
+)
+
+# b) Bootstrap statistic function
+boot_fun <- function(d, idx) {
+  # Resample rows
+  d2 <- d[idx, ]
+  
+  # Refit weighted logit
+  m <- glm(
+    retrofit ~ . - weights,
+    data    = d2,
+    weights = d2$weights,
+    family  = binomial(link = "logit")
+  )
+  
+  # Return coefficients
+  return(coef(m))
+}
+
+# c) Run nonparametric bootstrap
+set.seed(123)
+boot_out <- boot(
+  data      = data_boot,
+  statistic = boot_fun,
+  R         = 1000 
+)
+
+# d) Examine results
+print(boot_out)
+
+# e) Bootstrap percentile CI
+boot_ci_list <- lapply(seq_along(coef(logit)), function(i) {
+  boot.ci(boot_out, type = c("perc"), index = i)
+})
+names(boot_ci_list) <- names(coef(logit))
+
+print(boot_ci_list)
+
+# key insights:
+# All bootstrap SEs are aprox. model-based SEs:coefficients are numerically stable
+# Bias is extremely small for all parameters
+# Bootstrap percentile CIs confirm which coefficients are robustly significant
+
+# Not robust CIs:
+#  CDD_1723	    (-0.0915, 0.0098)	Weak, unstable. Sign uncertain.
+#  detached	    (-0.0261, 0.2034)	Unstable: can be weakly ±.
+#  naturalight	(-0.2103, 0.1686)	Very unstable. Basically noise.
+#  noises	      (-0.1012, 0.1393)	Unstable / irrelevant.
+#  bonosocial	  (-0.1482, 0.2099)	Completely unstable.
+#  twoadults	  (-0.086, 0.109)	  Unstable / no effect.
+#  kids	        (-0.1670, 0.0849)	Sign flips.
+
+# EVALUATE KEEPING THEM OUT OF THE MODEL !!!
+
+
+###############################################################################
+# RESIDUAL ANALYSIS: ARE LARGE RESIDUALS CLUSTERED IN SPECIFIC GROUPS?
+###############################################################################
+
+# Compute squared Pearson residuals from main model
+data_clean$resid_sq <- residuals(logit, type = "pearson")^2
+
+# Summary statistics
+print(summary(data_clean$resid_sq))
+cat("Mean squared residual:", round(mean(data_clean$resid_sq), 4), "\n")
+cat("SD squared residual:", round(sd(data_clean$resid_sq), 4), "\n\n")
+
+# FUNCTION TO SUMMARIZE AND TEST RESIDUALS BY BINARY GROUP
+
+summarize_residuals <- function(resid, group, group_labels, var_name) {
+  # Ensure group is numeric 0/1
+  group <- as.numeric(group)
+  
+  df <- data.frame(
+    variable = var_name,
+    group    = group_labels,
+    n        = sapply(0:1, function(x) sum(group == x)),
+    mean     = sapply(0:1, function(x) mean(resid[group == x], na.rm = TRUE)),
+    median   = sapply(0:1, function(x) median(resid[group == x], na.rm = TRUE)),
+    sd       = sapply(0:1, function(x) sd(resid[group == x], na.rm = TRUE)),
+    q75      = sapply(0:1, function(x) unname(quantile(resid[group == x], 0.75, na.rm = TRUE))),
+    q95      = sapply(0:1, function(x) unname(quantile(resid[group == x], 0.95, na.rm = TRUE)))
+  )
+  
+  # Difference in means
+  diff_mean <- df$mean[1] - df$mean[2]
+  
+  # t-test
+  test <- t.test(resid[group == 0], resid[group == 1])
+  
+  cat("RESIDUAL ANALYSIS:", var_name, "\n")
+  
+  print(df[, -1], row.names = FALSE)
+  cat("\nDifference (", group_labels[1], "-", group_labels[2], "): ", round(diff_mean, 4), "\n", sep = "")
+  cat("T-test for difference in mean squared residuals:\n")
+  cat("  t-statistic:", round(test$statistic, 4), "\n")
+  cat("  p-value:", format.pval(test$p.value, digits = 4), "\n")
+  if(test$p.value < 0.05) {
+    cat("  Result: SIGNIFICANT difference - residuals are larger in",
+        ifelse(diff_mean > 0, group_labels[1], group_labels[2]), "group\n\n")
+  } else {
+    cat("  Result: NO significant difference\n\n")
+  }
+  
+  return(df)
+}
+
+# 1. HOUSING SATISFACTION
+satisfaction_resid_table <- summarize_residuals(
+  resid        = data_clean$resid_sq,
+  group        = data_clean$satisfac.vivienda_n,
+  group_labels = c("Dissatisfied", "Satisfied"),
+  var_name     = "Housing Satisfaction"
+)
+
+# 2. WINTER COMFORT
+winter_resid_table <- summarize_residuals(
+  resid        = data_clean$resid_sq,
+  group        = data_clean$enough.temp.wint,
+  group_labels = c("Uncomfortable", "Comfortable"),
+  var_name     = "Winter Comfort"
+)
+
+
+# 3. SUMMER COMFORT
+summer_resid_table <- summarize_residuals(
+  resid        = data_clean$resid_sq,
+  group        = data_clean$enough.temp.summ,
+  group_labels = c("Uncomfortable", "Comfortable"),
+  var_name     = "Summer Comfort"
+)
+
+# SUMMARY TABLE: ALL THREE VARIABLES
+summary_residuals <- rbind(
+  satisfaction_resid_table,
+  winter_resid_table,
+  summer_resid_table
+)
+
+# Select columns in desired order
+summary_residuals <- summary_residuals[, c("variable", "group", "n", "mean", "sd", "q75", "q95")]
+
+# SUMMARY: MEAN SQUARED RESIDUALS ACROSS ALL GROUPS
+print(summary_residuals, row.names = FALSE)
+
+# Residuals Dissatisfied > Satisfied
+# High SD (few extreme residuals driving variance)
+
+# Residuals Winter Comfortable > Uncomfortable
+# Extreme residuals high q95 show few observatoins are poorly predicted
+
+# Residuals Summer Comfortable > Uncomfortable
+# Again, suggests underfitting of the comfortable group
+
+
+###############################################################################
+# 7. BREUSCH-PAGAN TEST: COMPLETE CODE & PRESENTATION
+###############################################################################
+
+# 1. BREUSCH-PAGAN TEST - FULL SAMPLE
+bptest(logit, varformula = NULL, studentize = FALSE)
+
+# We reject the null hypothesis of homoskedasticity (variance of the outcome 
+# differs systematically across predictors)
+
+
+###############################################################################
+# 8. ROBUST STANDARD ERRORS
+###############################################################################
+
+# Such that:
+bptest(logit, varformula = NULL, studentize = FALSE)
+
+# We reject the null hypothesis of no heteroskedasticity
+# Therefore, we need to report robust standard errors:
+print(robse <- coeftest(logit, vcov = vcovHC(logit, type = "HC1")))
+
+
+###############################################################################
+# 9. BOOTSTRAPPED AVERAGE MARGINAL EFFECTS (AME) 
+###############################################################################
+# Binary variables: Discrete change (0 to 1)
+# Continuous variables: Average derivative across all observations
+###############################################################################
+
+set.seed(123)
+n_bootstrap <- 1000
+
+# Fit original model
+model_original <- glm(formula = as.formula(paste("retrofit ~", vars_formula)),
+                      family  = binomial(link = "logit"),
+                      data    = data_clean,
+                      weights = weights_normalised)
+
+# Storage for bootstrap results
+bootstrap_ame <- list()
+for (var in vars) {
+  bootstrap_ame[[var]] <- numeric(n_bootstrap)
+}
+
+# Bootstrap loop
+for (b in 1:n_bootstrap) {
+  
+  # Sample with replacement (preserve weights)
+  boot_idx     <- sample(1:nrow(data_clean), size = nrow(data_clean), replace = TRUE)
+  data_boot    <- data_clean[boot_idx, ]
+  weights_boot <- weights_normalised[boot_idx]
+  
+  # Estimate model on bootstrap sample
+  model_boot <- glm(formula = as.formula(paste("retrofit ~", vars_formula)),
+                    family  = binomial(link = "logit"),
+                    data    = data_boot,
+                    weights = weights_boot)
+  
+  coef_boot <- coef(model_boot)
+  
+  # Compute AME for each variable
+  for (var in vars) {
+    
+    # Check if variable is binary
+    unique_vals <- unique(data_boot[[var]][!is.na(data_boot[[var]])])
+    is_binary   <- (length(unique_vals) == 2 && all(sort(unique_vals) == c(0, 1))) || 
+      is.factor(data_boot[[var]])
+    
+    if (is_binary) {
+      
+      # BINARY VARIABLE: Discrete change P(Y=1|X,D=1) - P(Y=1|X,D=0)
+      # Average over all observations
+      
+      data_0 <- data_boot
+      data_0[[var]] <- 0
+      pred_0 <- predict(model_boot, newdata = data_0, type = "response")
+      
+      data_1 <- data_boot
+      data_1[[var]] <- 1
+      pred_1 <- predict(model_boot, newdata = data_1, type = "response")
+      
+      # Average discrete change
+      bootstrap_ame[[var]][b] <- mean(pred_1 - pred_0, na.rm = TRUE)
+      
+    } else {
+      
+      # CONTINUOUS VARIABLE: Average derivative β × mean[ŷ(1-ŷ)]
+      # This is the proper AME for continuous variables
+      
+      pred_prob <- predict(model_boot, newdata = data_boot, type = "response")
+      
+      # ME = β × average of [p(1-p)] across all observations
+      avg_derivative <- mean(pred_prob * (1 - pred_prob), na.rm = TRUE)
+      bootstrap_ame[[var]][b] <- coef_boot[var] * avg_derivative
+    }
+  }
+  
+  # Progress indicator
+  if (b %% 100 == 0) {
+    cat("Completed", b, "iterations\n")
+  }
+}
+
+# SUMMARIZE BOOTSTRAP RESULTS
+ame_summary <- data.frame(
+  variable     = vars,
+  estimate     = NA,
+  se           = NA,
+  ci_lower     = NA,
+  ci_upper     = NA,
+  crosses_zero = NA,
+  stringsAsFactors = FALSE
+)
+
+for (i in seq_along(vars)) {
+  var <- vars[i]
+  ame_summary$estimate[i]     <- mean(bootstrap_ame[[var]], na.rm = TRUE)
+  ame_summary$se[i]           <- sd(bootstrap_ame[[var]], na.rm = TRUE)
+  ame_summary$ci_lower[i]     <- quantile(bootstrap_ame[[var]], 0.025, na.rm = TRUE)
+  ame_summary$ci_upper[i]     <- quantile(bootstrap_ame[[var]], 0.975, na.rm = TRUE)
+  ame_summary$crosses_zero[i] <- (ame_summary$ci_lower[i] < 0) & 
+    (ame_summary$ci_upper[i] > 0)
+}
+
+# Add significance indicator
+ame_summary$significant <- !ame_summary$crosses_zero
+
+# Sort by absolute effect size (descending)
+ame_summary <- ame_summary[order(-abs(ame_summary$estimate)), ]
+
+# Print ame summary
+print(ame_summary, row.names = FALSE)
+
+# Significant effects (95% CI does not cross zero)
+significant_effects <- ame_summary[ame_summary$significant, ]
+print(significant_effects[, c("variable", "estimate", "se", "ci_lower", "ci_upper")], 
+      row.names = FALSE)
+
+cat(paste("Number of significant effects:", sum(ame_summary$significant), 
+          "out of", nrow(ame_summary), "\n"))
+
+
+# AME PLOT (in % points)
+
+# Prepare data for plotting
+ame_plot <- ame_summary
+
+# Convert to percentage points (multiply by 100)
+ame_plot$estimate  <- ame_plot$estimate * 100
+ame_plot$ci_lower  <- ame_plot$ci_lower * 100
+ame_plot$ci_upper  <- ame_plot$ci_upper * 100
+ame_plot$se        <- ame_plot$se * 100
+
+ame_plot$color <- ifelse(ame_plot$significant, "black", "grey60")
+ame_plot$pch   <- ifelse(ame_plot$significant, 16, 1)  # Filled vs hollow
+
+# Create better variable labels
+var_labels <- c(
+  "CDD_1723"         = "Cooling degree days",
+  "HDD_1723"         = "Heating degree days",
+  "ownership"        = "Homeownership",
+  "detached"         = "Detached house",
+  "moisturedamage"   = "Moisture damage",
+  "pollution"        = "Pollution concern",
+  "naturalight"      = "Natural light issue",
+  "noises"           = "Noise problem",
+  "rooms_z"          = "Number of rooms (z)",
+  "ln_income_z"      = "Log income (z)",
+  "bonosocial"       = "Social bonus",
+  "allhigheducation" = "Higher education",
+  "meanageadults_z"  = "Mean age adults (z)",
+  "twoadults"        = "Two adults",
+  "kids"             = "Children present",
+  "highpopulation"   = "High population area"
+)
+
+ame_plot$label <- ifelse(ame_plot$variable %in% names(var_labels),
+                         var_labels[ame_plot$variable],
+                         ame_plot$variable)
+
+# Calculate plot dimensions
+x_min <- min(ame_plot$ci_lower, na.rm = TRUE) - 0.5
+x_max <- max(ame_plot$ci_upper, na.rm = TRUE) + 0.5
+
+# Set up plot with extra right margin for text
+par(mar = c(5, 10, 4, 12), family = "sans")
+
+plot(NA, 
+     xlim = c(x_min, x_max),
+     ylim = c(0.5, nrow(ame_plot) + 0.5),
+     xlab = "Average Marginal Effect (percentage points)",
+     ylab = "",
+     main = "Bootstrap Average Marginal Effects\n(1000 iterations, 95% CI)",
+     axes = FALSE,
+     cex.main = 1.1,
+     cex.lab = 1.0)
+
+# Add axes
+axis(1, cex.axis = 0.9)
+axis(2, at = 1:nrow(ame_plot), 
+     labels = ame_plot$label, 
+     las = 1, 
+     cex.axis = 0.85,
+     tick = FALSE)
+
+# Add vertical reference line at zero
+abline(v = 0, col = "red", lty = 2, lwd = 1.5)
+
+# Add light grey horizontal lines for readability
+for (i in seq(2, nrow(ame_plot), by = 2)) {
+  rect(x_min, i - 0.4, x_max, i + 0.4, 
+       col = rgb(0.95, 0.95, 0.95, alpha = 0.3), border = NA)
+}
+
+# Plot confidence intervals and point estimates
+for (i in 1:nrow(ame_plot)) {
+  
+  col_i <- ame_plot$color[i]
+  pch_i <- ame_plot$pch[i]
+  lwd_i <- ifelse(ame_plot$significant[i], 2.5, 1.5)
+  
+  # Draw CI line
+  segments(x0 = ame_plot$ci_lower[i], 
+           x1 = ame_plot$ci_upper[i], 
+           y0 = i, 
+           y1 = i, 
+           col = col_i, 
+           lwd = lwd_i)
+  
+  # Draw CI caps
+  segments(x0 = ame_plot$ci_lower[i], 
+           x1 = ame_plot$ci_lower[i], 
+           y0 = i - 0.15, 
+           y1 = i + 0.15, 
+           col = col_i, 
+           lwd = lwd_i)
+  
+  segments(x0 = ame_plot$ci_upper[i], 
+           x1 = ame_plot$ci_upper[i], 
+           y0 = i - 0.15, 
+           y1 = i + 0.15, 
+           col = col_i, 
+           lwd = lwd_i)
+  
+  # Draw point estimate
+  points(ame_plot$estimate[i], i, 
+         pch = pch_i, 
+         col = col_i, 
+         cex = 1.3,
+         lwd = 2)
+  
+  # Add text: AME value [CI_lower, CI_upper] in percentage points
+  combined_text <- sprintf("%.2f [%.2f, %.2f]", 
+                           ame_plot$estimate[i],
+                           ame_plot$ci_lower[i], 
+                           ame_plot$ci_upper[i])
+  
+  text(x_max + 0.3, i, 
+       combined_text, 
+       pos = 4, 
+       cex = 0.7, 
+       col = col_i,
+       xpd = TRUE)  # Allow text outside plot region
+}
+
+# Add note at bottom
+mtext("Variables sorted by absolute effect size | Values in percentage points", 
+      side = 1, line = 4, cex = 0.75, col = "grey40")
+
+
+
+###############################################################################
+# 11. 
+###############################################################################
+
+
+
+
+end.time <- Sys.time() # Track end time
+print(execution.time <- end.time - start.time)
