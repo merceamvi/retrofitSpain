@@ -124,13 +124,13 @@ table(data$pollution)
 table(data$naturalight)
 table(data$noises) 
 
-hist(data$rooms_z)
+hist(data$rooms)
 
 # Socio-demographic variables
-hist(data$ln_income_z) 
+hist(data$ln_income) 
 table(data$bonosocial) 
 table(data$allhigheducation) 
-hist(data$meanageadults_z) 
+hist(data$meanageadults) 
 table(data$twoadults) 
 table(data$kids) 
 table(data$highpopulation) 
@@ -236,37 +236,34 @@ data_clean <- data_clean %>% dplyr::mutate(weight_capped = weights_capped)
 ###############################################################################
 
 # Mean equation variables:
-#mean_vars <- paste(
 vars <- c(
-  "CDD_1723", "HDD_1723",
-  "ownership", "detached",
-  "moisturedamage", "pollution", "naturalight", "noises", "rooms_z",
-  "ln_income_z", "bonosocial", "allhigheducation", "meanageadults_z",
-  "twoadults", "kids", "highpopulation"
+  "CDD_1723_z", "HDD_1723_z",
+  "ownership", 
+  "detached",
+  "moisturedamage", 
+  "rooms_z",
+  #"sqmeteroom",
+  #"sqmeters",
+  #"actualrent",
+  #"housingcosts",
+  "pollution", 
+  #"naturalight", 
+  #"noises", 
+  #"bonosocial",  
+  "ln_income_z", "allhigheducation", "meanageadults_z", "highpopulation", 
+  #"twoadults", 
+  "kids"
+  #"hhmembers"
 )
 
 # Collapse into a single string for the formula
 vars_formula <- paste(vars, collapse = " + ")
 
-# i still don't know if we need the centered variables?
-data_clean$enough.temp.summ_c  <- data_clean$enough.temp.summ    - mean(data_clean$enough.temp.summ)
-data_clean$enough.temp.wint_c  <- data_clean$enough.temp.wint    - mean(data_clean$enough.temp.wint)
-data_clean$satisfac.vivienda_c <- data_clean$satisfac.vivienda_n - mean(data_clean$satisfac.vivienda_n)
-
 # Endogenous variables:
-#scale_vars <- paste(
 endo_vars <- paste(
   "enough.temp.summ", "enough.temp.wint", "satisfac.vivienda",
   sep = " + "
 )
-
-# Endogenous centered variables (will i need them?):
-#scale_vars_c <- paste(
-endo_centered <- paste(
-  "enough.temp.summ_c", "enough.temp.wint_c", "satisfac.vivienda_c",
-  sep = " + "
-)
-
 
 # Save data_clean object
 save(data_clean, file = "data_clean.RData")
@@ -277,15 +274,17 @@ save(data_clean, file = "data_clean.RData")
 ###############################################################################
 
 summary(logit <- glm(formula = as.formula(paste("retrofit ~", vars_formula)),
-             family  = binomial(link = "logit"),
-             data    = data_clean,
-             weights = weights_normalised)
+                     family  = binomial(link = "logit"),
+                     data    = data_clean,
+                     weights = weights_normalised)
 )
 
 AIC(logit)
 BIC(logit)
 logLik(logit)
 logit$converged
+
+
 
 ###############################################################################
 # 6. POST-ESTIMATION CHECKS ###################################################
@@ -423,6 +422,7 @@ satisfaction_resid_table <- summarize_residuals(
   group_labels = c("Dissatisfied", "Satisfied"),
   var_name     = "Housing Satisfaction"
 )
+# SIGNIFICANT difference - residuals are larger in Dissatisfied group
 
 # 2. WINTER COMFORT
 winter_resid_table <- summarize_residuals(
@@ -431,7 +431,7 @@ winter_resid_table <- summarize_residuals(
   group_labels = c("Uncomfortable", "Comfortable"),
   var_name     = "Winter Comfort"
 )
-
+# SIGNIFICANT difference - residuals are larger in Comfortable group
 
 # 3. SUMMER COMFORT
 summer_resid_table <- summarize_residuals(
@@ -440,6 +440,7 @@ summer_resid_table <- summarize_residuals(
   group_labels = c("Uncomfortable", "Comfortable"),
   var_name     = "Summer Comfort"
 )
+# SIGNIFICANT difference - residuals are larger in Comfortable group
 
 # SUMMARY TABLE: ALL THREE VARIABLES
 summary_residuals <- rbind(
@@ -447,7 +448,6 @@ summary_residuals <- rbind(
   winter_resid_table,
   summer_resid_table
 )
-
 # Select columns in desired order
 summary_residuals <- summary_residuals[, c("variable", "group", "n", "mean", "sd", "q75", "q95")]
 
@@ -479,11 +479,8 @@ bptest(logit, varformula = NULL, studentize = FALSE)
 # 8. ROBUST STANDARD ERRORS
 ###############################################################################
 
-# Such that:
-bptest(logit, varformula = NULL, studentize = FALSE)
-
-# We reject the null hypothesis of no heteroskedasticity
-# Therefore, we need to report robust standard errors:
+# Such that we reject the null hypothesis of no heteroskedasticity
+# We need to report robust standard errors:
 print(robse <- coeftest(logit, vcov = vcovHC(logit, type = "HC1")))
 
 
@@ -616,7 +613,7 @@ ame_plot <- ame_summary
 ame_plot$estimate  <- ame_plot$estimate * 100
 ame_plot$ci_lower  <- ame_plot$ci_lower * 100
 ame_plot$ci_upper  <- ame_plot$ci_upper * 100
-ame_plot$se        <- ame_plot$se * 100
+ame_plot$se        <- ame_plot$se       * 100
 
 ame_plot$color <- ifelse(ame_plot$significant, "black", "grey60")
 ame_plot$pch   <- ifelse(ame_plot$significant, 16, 1)  # Filled vs hollow
@@ -628,10 +625,10 @@ var_labels <- c(
   "ownership"        = "Homeownership",
   "detached"         = "Detached house",
   "moisturedamage"   = "Moisture damage",
-  "pollution"        = "Pollution concern",
-  "naturalight"      = "Natural light issue",
+  "pollution"        = "Pollution",
+  "naturalight"      = "Natural light",
   "noises"           = "Noise problem",
-  "rooms_z"          = "Number of rooms (z)",
+  "rooms_z"          = "N. of rooms (z)",
   "ln_income_z"      = "Log income (z)",
   "bonosocial"       = "Social bonus",
   "allhigheducation" = "Higher education",
@@ -735,9 +732,6 @@ mtext("Variables sorted by absolute effect size | Values in percentage points",
       side = 1, line = 4, cex = 0.75, col = "grey40")
 
 
-
-###############################################################################
-# 11. 
 ###############################################################################
 
 
