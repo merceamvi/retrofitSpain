@@ -1,20 +1,24 @@
 ###############################################################################
 # Project       : [rehabSpain] [2] DESCRIPTIVES & BASELINE LOGIT
 # Creation date : 02/12/2024
-# Last update   : 22/06/2026
+# Last update   : 26/06/2026
 # Author        : Mercè Amich (merce.amich@ehu.eus)
 # Institution   : UPV/EHU, BC3
 # Last run time : 3.1 min.
+
 # Script Overview:
 #   Data preparation, outcome distribution and descriptive statistics,
 #   baseline weighted binary logit, HC1-robust estimates and bootstrapped
 #   average marginal effects (AMEs).
+
 # Requirements:
 #   - This script must be in the same directory as:
 #       a) _setup.R
 #       b) data.RData   (output of 01_build_data.R)
+
 # Output  : Publication-ready tables (kableExtra) + ggplots (TIFF)
 #           + 02_descriptives_logit.RData (objects for the next stage)
+
 ###############################################################################
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -52,7 +56,7 @@ active_vars <- c(
   "ln_income",             # Income (log)
   "allhigheducation",      # All members have high education
   "meanageadults",         # Mean age adults (>= 18 years old)
-  "highpopulation",        # High dense populated area
+  "highlyurbanised",       # Highly urbanised municipality
   "kids"                   # Presence of children in the household
 )
 
@@ -67,7 +71,7 @@ var_labels <- c(
   "ln_income"        = "Income (log)",
   "allhigheducation" = "High educated",
   "meanageadults"    = "Mean age of adults",
-  "highpopulation"   = "High population municipality",
+  "highlyurbanised"  = "Highly urbanised municipality",
   "kids"             = "Children present"
 )
 
@@ -80,22 +84,25 @@ data_clean <- data[complete.cases(data[, required_vars]), ] # Keep if no NA's
 n_removed  <- n_total - nrow(data_clean) # Keep track of removed observations
 
 # Report of removed observations (both in this and in the first script)
-cat(sprintf("  Removed %d obs (%.1f%%) due to missing values\n  Total removed in 1st script:   %.2f%% (survey), %.2f%% (weighted)\n  Total removed in both scripts: %.2f%% (survey), %.2f%% (weighted)\n  Final sample: n = %s\n",
-            n_removed, 
-            100 * n_removed / n_total,
-            sample_info$pct_removed_cumulative_unweighted,
-            sample_info$pct_removed_cumulative_weighted,
-            100 * (sample_info$n_original_unweighted - nrow(data_clean)) / sample_info$n_original_unweighted,
-            100 * (sample_info$n_original_weighted - sum(data_clean$weight)) / sample_info$n_original_weighted,
-            format(nrow(data_clean), big.mark = ",")))
+cat(sprintf("  Removed %d obs (%.1f%%) due to missing values\n  
+  Total removed in 1st script:   %.2f%% (survey), %.2f%% (weighted)\n  
+  Total removed in both scripts: %.2f%% (survey), %.2f%% (weighted)\n  
+  Final sample: n = %s\n",
+  n_removed, 
+  100 * n_removed / n_total,
+  sample_info$pct_removed_cumulative_unweighted,
+  sample_info$pct_removed_cumulative_weighted,
+  100 * (sample_info$n_original_unweighted - nrow(data_clean)) / sample_info$n_original_unweighted,
+  100 * (sample_info$n_original_weighted - sum(data_clean$weight)) / sample_info$n_original_weighted,
+  format(nrow(data_clean), big.mark = ",")))
 
-# Normalise and cap survey weights at 99.5th percentile
-w_raw  <- data_clean$weight
-w_norm <- w_raw / mean(w_raw, na.rm = TRUE)
-w_cap  <- pmin(w_norm, quantile(w_norm, 0.995, na.rm = TRUE))
+# Normalise and trim survey weights at 99.5th percentile
+w_raw                   <- data_clean$weight
+w_norm                  <- w_raw / mean(w_raw, na.rm = TRUE)
+w_cap                   <- pmin(w_norm, quantile(w_norm, 0.995, na.rm = TRUE))
 data_clean$weight_final <- w_cap / mean(w_cap)
 
-# Percentage of adopters (retrofit == 1) in the finalsample
+# Percentage of adopters (retrofit == 1) in the final sample
 cat(sprintf("  Adopters: %d (%.1f%%)\n",
             sum(data_clean$retrofit), 100 * mean(data_clean$retrofit)))
 
@@ -162,8 +169,7 @@ adopter_detail <- outcome_dist_raw %>%
     Category  = paste0("\u00a0\u00a0\u00a0\u00a0", as.character(count_label)),
     Outcome   = ""
   ) %>%
-  select(Category, Outcome,
-         n_unweighted, pct_unweighted, pct_weighted)
+  select(Category, Outcome, n_unweighted, pct_unweighted, pct_weighted)
 
 # Combine into final table
 tbl1 <- bind_rows(
@@ -205,7 +211,7 @@ kbl1 <- kbl(
   row_spec(3:5, background = "#f7f7f7", italic = TRUE) %>%
   footnote(
     general = sprintf(
-      "N = %s households. Survey weights capped at 99.5th percentile.",
+      "N = %s households. Survey weights trimmed at 99.5th percentile.",
       format(nrow(data_clean), big.mark = ",")
     ),
     general_title     = "Notes:",
@@ -215,7 +221,7 @@ kbl1 <- kbl(
 print(kbl1)
 save_table(kbl1, "Table1_Outcome_distribution.html")
 
-# TABLE 2: DESCRIPTIVE STATISTICS
+# TABLE A.1: DESCRIPTIVE STATISTICS
 
 # Variable descriptions (expanded)
 var_descriptions <- c(
@@ -229,14 +235,14 @@ var_descriptions <- c(
   "ln_income"        = "Income (log)",
   "allhigheducation" = "All members have high education",
   "meanageadults"    = "Mean age of adults (≥18y)",
-  "highpopulation"   = "High density and populated municipality",
+  "highlyurbanised"  = "Highly urbanised municipality",
   "kids"             = "Children present in the household"
 )
 
 # Variable types
 continuous_vars <- c("CDD_1723", "HDD_1723", "rooms", "ln_income", "meanageadults")
 binary_vars     <- c("ownership", "detached", "moisturedamage", "pollution", 
-                     "allhigheducation", "highpopulation", "kids")
+                     "allhigheducation", "highlyurbanised", "kids")
 
 # Outcome variable
 outcome_stats <- data.frame(
@@ -314,12 +320,12 @@ desc_building <- rbind(
 
 # D. SOCIO-DEMOGRAPHIC VARIABLES
 sociodem_vars <- c("ln_income", "allhigheducation", "meanageadults", 
-                   "highpopulation", "kids")
+                   "highlyurbanised", "kids")
 desc_sociodem <- rbind(
   compute_continuous("ln_income"),
   compute_binary("allhigheducation"),
   compute_continuous("meanageadults"),
-  compute_binary("highpopulation"),
+  compute_binary("highlyurbanised"),
   compute_binary("kids")
 )
 
@@ -338,10 +344,10 @@ n_building <- 7
 n_sociodem <- 12
 
 # Create kableExtra table with section headers
-kblS1 <- kbl(
+kblA1 <- kbl(
   desc_stats_full %>% select(-Variable),
   format    = "html",
-  caption   = "Table 2. Descriptive statistics",
+  caption   = "Table A.1. Descriptive statistics",
   align     = c("l", "c", "r", "r", "r", "r", "r", "r", "r", "r"),
   row.names = FALSE,
   digits    = 2
@@ -370,23 +376,23 @@ kblS1 <- kbl(
             label_row_css = "background-color: #f0f0f0; font-weight: bold;") %>%
   
   footnote(
-    general = sprintf("N = %s households. Binary variables coded as 1 = Yes, 0 = No. Survey weights capped at 99.5th percentile.",
+    general = sprintf("N = %s households. Binary variables coded as 1 = Yes, 0 = No. 
+                      Unweighted descriptive statistics.",
                       format(nrow(data_clean), big.mark = ",")),
     general_title = "Notes:",
     footnote_as_chunk = TRUE
   )
 
-print(kblS1)
-save_table(kblS1, "TableS1_Descriptive_statistics.html")
+print(kblA1)
+save_table(kblA1, "Table_A1_Descriptive_statistics.html")
 
 # Clean up
 remove(desc_outcome, desc_climatic, desc_building, desc_sociodem, desc_stats_full,
        climatic_vars, building_vars, sociodem_vars, continuous_vars, binary_vars,
        var_descriptions, outcome_stats, n_outcome, n_climatic, n_building, n_sociodem,
-       compute_continuous, compute_binary, kbl1, kblS1, sample_info, adopter_detail,
+       compute_continuous, compute_binary, kbl1, kblA1, sample_info, adopter_detail,
        adopter_summary, non_adopter_summary, outcome_dist_raw)
 gc()
-
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -397,9 +403,9 @@ gc()
 formula_baseline <- as.formula(paste("retrofit ~", paste(active_vars, collapse = " + ")))
 
 print(summary(logit_baseline <- glm(formula  = formula_baseline,
-                              family   = binomial(link = "logit"),
-                              data     = data_clean,
-                              weights  = weight_final))
+                                    family   = binomial(link = "logit"),
+                                    data     = data_clean,
+                                    weights  = weight_final))
 )
 
 cat(sprintf("  Log-likelihood: %.2f | AIC: %.2f | BIC: %.2f\n",
@@ -410,7 +416,7 @@ vcov_robust <- vcovHC(logit_baseline, type = "HC1")
 coef_robust <- coeftest(logit_baseline, vcov = vcov_robust)
 
 
-# TABLE S2: LOGIT MODEL ESTIMATION RESULTS (HC1 ROBUST)
+# TABLE B.1: LOGIT MODEL ESTIMATION RESULTS (HC1 ROBUST)
 
 appendix_labels <- c(
   "(Intercept)"      = "Intercept",
@@ -424,18 +430,18 @@ appendix_labels <- c(
   "ln_income"        = "Household income (log)",
   "allhigheducation" = "All adults with tertiary education",
   "meanageadults"    = "Mean age of adults (>=18 years)",
-  "highpopulation"   = "High-population municipality (>10,000 inhab.)",
+  "highlyurbanised"  = "Highly urbanised municipality",
   "kids"             = "Children present in household"
 )
 
-kblS2 <- data.frame(
-  term    = rownames(coef_robust),
-  estimate = coef_robust[, 1],
-  se_hc1   = coef_robust[, 2],
-  z_stat   = coef_robust[, 3],
-  p_value  = coef_robust[, 4],
+kblB1 <- data.frame(
+  term             = rownames(coef_robust),
+  estimate         = coef_robust[, 1],
+  se_hc1           = coef_robust[, 2],
+  z_stat           = coef_robust[, 3],
+  p_value          = coef_robust[, 4],
   stringsAsFactors = FALSE,
-  row.names = NULL
+  row.names        = NULL
 ) %>%
   mutate(
     Variable  = appendix_labels[term],
@@ -446,14 +452,14 @@ kblS2 <- data.frame(
     ` `       = case_when(p_value < 0.001 ~ "***",
                           p_value < 0.01  ~ "**",
                           p_value < 0.05  ~ "*",
-                          p_value < 0.10  ~ "†",
+                          p_value < 0.10  ~ ".",
                           TRUE            ~ "")
   ) %>%
   mutate(term = factor(term, levels = c("(Intercept)", active_vars))) %>%
   arrange(term) %>%
   select(Variable, Estimate, `Rob. SE`, `z`, `p-value`, ` `) %>%
   kbl(format    = "html",
-      caption   = "Table S2. Baseline binary logit coefficient estimates with heteroskedasticity-robust standard errors (HC1)",
+      caption   = "Table B1. Baseline binary logit coefficient estimates with heteroskedasticity-robust standard errors (HC1)",
       align     = c("l", "r", "r", "r", "r", "c"),
       row.names = FALSE) %>%
   kable_classic(full_width = FALSE, html_font = "Times New Roman") %>%
@@ -470,9 +476,9 @@ kblS2 <- data.frame(
   footnote(
     general = sprintf(
       paste0(
-        "N = %s households. Maximum likelihood estimation with survey weights capped at 99.5th percentile. ",
+        "N = %s households. Maximum likelihood estimation with survey weights trimmed at 99.5th percentile. ",
         "Log-likelihood = %.2f; AIC = %.2f; BIC = %.2f. ",
-        "*** p < 0.001, ** p < 0.01, * p < 0.05, † p < 0.10."
+        "*** p < 0.001, ** p < 0.01, * p < 0.05, . p < 0.10."
       ),
       format(nrow(data_clean), big.mark = ","),
       as.numeric(logLik(logit_baseline)),
@@ -483,11 +489,11 @@ kblS2 <- data.frame(
     footnote_as_chunk = TRUE
   )
 
-print(kblS2)
-save_table(kblS2, "TableS2_Logit_robust.html")
+print(kblB1)
+save_table(kblB1, "TableB1_Logit_robust.html")
 
 # Clean up
-remove(appendix_labels, kblS2, vcov_robust, coef_robust)
+remove(appendix_labels, kblB1, vcov_robust, coef_robust)
 gc()
 
 
@@ -527,18 +533,19 @@ boot_ame_fn <- function(data, indices) {
       d0 <- d; d0[[v]] <- 0L
       d1 <- d; d1[[v]] <- 1L
       ame[v] <- mean(predict(m, newdata = d1, type = "response") -
-                     predict(m, newdata = d0, type = "response"), na.rm = TRUE)
+                       predict(m, newdata = d0, type = "response"), na.rm = TRUE)
     } else {
       
       # For continuous variables, add 1 standard deviation, refit
       pp     <- predict(m, newdata = d, type = "response")
       sd_x   <- sd(d[[v]], na.rm = TRUE)
       ame[v] <- coef(m)[v] * mean(pp * (1 - pp), na.rm = TRUE) * sd_x
-      }
+    }
   }
   ame
 }
 
+# Run bootstrap
 boot_ame <- boot(data      = data_clean, 
                  statistic = boot_ame_fn, 
                  R         = n_boot)
@@ -563,7 +570,7 @@ block_map <- c(
   "ln_income"        = "C. Socio-demographic characteristics",
   "allhigheducation" = "C. Socio-demographic characteristics",
   "meanageadults"    = "C. Socio-demographic characteristics",
-  "highpopulation"   = "C. Socio-demographic characteristics",
+  "highlyurbanised"  = "C. Socio-demographic characteristics",
   "kids"             = "C. Socio-demographic characteristics",
   "ownership"        = "B. Dwelling and environmental characteristics",
   "detached"         = "B. Dwelling and environmental characteristics",
@@ -580,7 +587,7 @@ block_order <- c(
   "C. Socio-demographic characteristics"
 )
 
-tblS3 <- ame_df %>%
+tblB2 <- ame_df %>%
   mutate(
     block = block_map[variable],
     block = factor(block, levels = block_order),
@@ -591,17 +598,19 @@ tblS3 <- ame_df %>%
   transmute(
     block,
     Variable   = label,
-    `AME (%)` = round(estimate, 2),
+    `AME (%)`  = round(estimate, 2),
     `SE`       = round(se, 2),
     `95% CI`   = sprintf("[%.2f, %.2f]", ci_lo, ci_hi),
     `Sig.`     = ifelse(sig, "*", "")
   )
+
 # Compute pack_rows indices from block structure
-block_indices <- tblS3 %>%
+block_indices <- tblB2 %>%
   mutate(row = row_number()) %>%
   group_by(block) %>%
   summarise(start = min(row), end = max(row), .groups = "drop")
-kbls3 <- tblS3 %>%
+
+kblB2 <- tblB2 %>%
   select(-block) %>%
   kbl(format  = "html",
       caption = "Table S3. Bootstrapped average marginal effects",
@@ -610,9 +619,10 @@ kbls3 <- tblS3 %>%
   kable_classic(full_width = FALSE, html_font = "Times New Roman") %>%
   kable_styling(font_size = 11) %>%
   row_spec(0, bold = TRUE)
+
 # Add pack_rows dynamically from block_indices
 for (i in seq_len(nrow(block_indices))) {
-  kbls3 <- kbls3 %>%
+  kblB2 <- kblB2 %>%
     pack_rows(
       as.character(block_indices$block[i]),
       block_indices$start[i],
@@ -620,18 +630,20 @@ for (i in seq_len(nrow(block_indices))) {
       label_row_css = "background-color: #f0f0f0; font-weight: bold;"
     )
 }
-kbls3 <- kbls3 %>%
+
+kblB2 <- kblB2 %>%
   footnote(
     general = paste0(
-      "AME in percentage points (pp). Continuous variables scaled by one standard deviation. ",
-      "95% CI from 1,000 bootstrap iterations. * = CI excludes zero."
-    ),
-    general_title     = "Notes:",
+      "Survey weights trimmed at the 99.5th percentile. Bootstrapped (1,000 iterations) 95% CIs. \n",
+      "For continuous variables, the AME represents the effect of a one-standard-deviation increase. \n",
+      "For binary variables, the AME represents the average difference in predicted probability of the discrete change. \n",
+      "* = CI excludes zero"),
+    general_title     = "Notes: \n",
     footnote_as_chunk = TRUE
   )
 
-print(kbls3)
-save_table(kbls3, "TableS3_AME.html")
+print(kblB2)
+save_table(kblB2, "TableB2_AME.html")
 
 # FIGURE 1: Forest plot of AMEs (block-structured)
 
@@ -640,7 +652,7 @@ block_map <- c(
   "ln_income"        = "Socio-demographic",
   "allhigheducation" = "Socio-demographic",
   "meanageadults"    = "Socio-demographic",
-  "highpopulation"   = "Socio-demographic",
+  "highlyurbanised"  = "Socio-demographic",
   "kids"             = "Socio-demographic",
   "ownership"        = "Dwelling and environmental",
   "detached"         = "Dwelling and environmental",
@@ -706,8 +718,8 @@ fig1 <- ggplot(ame_plot_df, aes(x = label, y = estimate)) +
     x        = NULL,
     y        = "Average marginal effect (pp)",
     caption  = paste0(
-      "Notes: Filled points indicate 95% CI excludes zero. ",
-      "Continuous variables: effect of one standard deviation change. ",
+      "Notes: Filled points indicate 95% CI excludes zero. \n ",
+      "Continuous variables: effect of one standard deviation change. \n ",
       "Bootstrapped CIs (1,000 iterations)."
     )
   ) +
@@ -725,8 +737,7 @@ fig1 <- ggplot(ame_plot_df, aes(x = label, y = estimate)) +
     panel.grid.major.x    = element_line(color = "gray85", linewidth = 0.3),
     panel.grid.minor.x    = element_blank(),
     panel.grid.major.y    = element_blank(),
-    strip.text.y          = element_text(face = "bold", size = 8, angle = 270,
-                                         hjust = 0.5, vjust = 0.5, color = "black"),
+    strip.text.y          = element_blank(),
     strip.background      = element_blank(),
     strip.placement       = "outside",
     axis.ticks.x          = element_line(color = "gray40", linewidth = 0.3),
@@ -736,20 +747,22 @@ fig1 <- ggplot(ame_plot_df, aes(x = label, y = estimate)) +
   )
 
 print(fig1)
-ggsave("Figure1_AME_forest.pdf", fig1, width = 6.5, height = 4.5, device = cairo_pdf)
+ggsave("Figure1_AME_forest.pdf", fig1, 
+       width  = 6.5, 
+       height = 4, 
+       device = cairo_pdf)
 
 ggsave("Figure1_AME_forest.tiff",
        plot   = fig1,
        device = "tiff",
        width  = 20,
-       height = 17,
+       height = 15,
        units  = "cm",
        dpi    = 900)
 
 # Clean up
-remove(boot_ame, boot_ame_fn, .eb, tblS3, fig1, 
-       ame_plot_df, block_map, block_order, 
-       block_indices, kbls3)
+remove(boot_ame, boot_ame_fn, .eb, tblB2, fig1, ame_plot_df, block_map, 
+       block_order, block_indices, kblB2)
 gc()
 
 
@@ -757,8 +770,8 @@ gc()
 # ══════════════════════════════════════════════════════════════════════════════
 # SAVE INTERMEDIATE OBJECTS FOR THE NEXT STAGE
 # ══════════════════════════════════════════════════════════════════════════════
-# NOTE: ame_df kept because the
-# profile-specific Figure 3 (PDF) in stage 04 references it.
+# NOTE: ame_df kept because the profile-specific Figure 3 (PDF) in stage 04 
+# references it.
 
 save(data_clean, logit_baseline, formula_baseline, ame_df,
      active_vars, var_labels, outcome_var,
