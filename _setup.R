@@ -1,14 +1,13 @@
 ###############################################################################
 # Project       : [rehabSpain] [0] SHARED SETUP (packages, theme, helpers)
 # Creation date : 02/12/2024
-# Last update   : 09/06/2026
+# Last update   : 26/06/2026
 # Author        : Mercè Amich (merce.amich@ehu.eus)
-# Institution   : UPV/EHU, BC3
-# Last run time : —
+# Institution   : EHU, BC3
 # Script Overview:
 #   Common preamble sourced by scripts 02-04: package loading, working
-#   directory, publication ggplot2 theme, colour palettes and save helpers.
-#   Not a pipeline stage on its own; it is source()d at the top of each
+#   directory, publication ggplot2 theme, color palettes and save helpers.
+#   Not a pipeline stage on its own; it is sourced at the top of each
 #   analysis script so they share an identical environment.
 # Requirements:
 #   - source("_setup.R") at the top of scripts 02, 03 and 04
@@ -20,7 +19,7 @@ Sys.setenv(LANG = "en")
 # Install and load all required packages
 packages_needed <- c(
   "here",                                          # wd handling
-  "dplyr", "tidyr", "tibble", "scales",            # Data wrangling
+  "dplyr", "tidyr", "tibble", "scales", "Hmisc",   # Data wrangling
   "boot", "lmtest", "car", "AER", "broom",         # Modelling & inference
   "FactoMineR", "factoextra", "cluster", "mclust", # FAMD & clustering
   "ggplot2", "ggrepel", "patchwork", "forcats",    # Visualisation
