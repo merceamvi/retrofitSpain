@@ -1,18 +1,22 @@
 ###############################################################################
 # Project       : [rehabSpain] [1] DOWNLOAD DATA & MERGE FUSED AND CLIMATIC
 # Creation date : 02/12/2024
-# Last update   : 22/06/2026
+# Last update   : 26/06/2026
 # Author        : Mercè Amich (merce.amich@ehu.eus)
 # Institution   : UPV/EHU, BC3
 # Last run time : 2.06 min.
+
 # Script Overview:
 #   This script processes SILC-23 data from INE, merges additional data 
 #   (HDD/CDD), performs preliminary transformations, and prepares the data
-#   for binary logit + FAMD + GMM modelling
+#   for binary logit + FAMD + GMM
+
 # Requirements:
 #   - This script must be in the same directory as:
 #       b) HDD_CDD.xlsx
+
 # Output  : data.RData
+
 ###############################################################################
 
 # =============================== PRELIMINARIES ==============================
@@ -21,7 +25,7 @@ rm(list = ls(all = TRUE)) # Clear workspace
 Sys.setenv(LANG = "en")   # Set system language
 start.time <- Sys.time()  # Track start time
 
-# --------------------------- Load Required Packages -------------------------
+# ---- Load Required Packages ----
 packages.needed <- c(
   "here", "rvest", "httr", "dplyr", "ggplot2", "pscl", "AER", "scales",
   "survey", "gridExtra", "readxl", "effects", "foreign", "aod", "lmtest",
@@ -50,8 +54,8 @@ page_url <- "https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&c
 page <- read_html(page_url)
 
 option_selector <- "//select[@id='ir']//option[contains(text(),'2023')]"
-option_element <- page %>% html_nodes(xpath = option_selector)
-file_path <- option_element %>% html_attr("value")
+option_element  <- page %>% html_nodes(xpath = option_selector)
+file_path       <- option_element %>% html_attr("value")
 
 base_url <- "https://www.ine.es"
 file_url <- paste0(base_url, file_path[1])  # Take only first link
@@ -100,21 +104,21 @@ for (folder in folders_to_remove) {
 # Keep only relevant objects
 rm(list = setdiff(ls(), c("Td", "Th", "Tp", "Tr", "path", "start.time")))
 
-# ---- c) Merge Household & Individual ----
+# ---- c) Merge Household & Individual data objects by shared key ----
 household  <- left_join(Td, Th, by = c("DB030" = "HB030"))
 individual <- left_join(Tr, Tp, by = c("RB030" = "PB030"))
 
 # Keep only merged data frames, path and timing
 rm(list = setdiff(ls(), c("household", "individual", "path", "start.time")))
 
-# ---- d) Select and summarize variables ----
+# ---- d) Select and summarise variables ----
 # Explanation: Select key hh & individual-level variables, create dummies
 # and collapse individual-level variables to household level.
 
 # Household:
 household <- household %>%
   dplyr::select(
-    DB030   # Household identifier
+    DB030      # Household identifier
     , DB090    # Weights
     , DB040    # CCAA
     , DB100    # Urbanisation grade
@@ -129,21 +133,21 @@ household <- household %>%
     , HS160    # Insufficient natural light
     , HS170    # Noises (industries, street...)
     , HS180    # Environmental pollution in the zone
-    , HC001    # Tipo calef
+    , HC001    # Heating type
     
-    , HC060    # Enough temperature in summer
-    , HC070    # Enough temperature in winter
-    , HS022    # Bono social
+    , HC060    # Enough temperature in winter
+    , HC070    # Enough temperature in summer
+    , HS022    # Social bonus
     
-    , HH050    # Pagar enough temp in winter
+    , HH050    # Affordability enough temp. winter
     , vhMATDEP # Material deprivation
     , HC080    # Dwelling satisfaction
     
-    , HH060    # Alquiler actual por la vivienda ocupada    
-    , HH070    # Gastos vivienda  
+    , HH060    # Rental costs for main dwelling    
+    , HH070    # Housing expenses  
     
-    , HC002    # Principal energy source dwelling
-    , HC003    # Retrofit-Renovation measures count
+    , HC002    # Main energy source dwelling
+    , HC003    # Retrofit-renovation measures count
   ) %>%
   
   # Group by household identifier
@@ -151,7 +155,7 @@ household <- household %>%
   
   # Indications on how to collapse variables
   dplyr::summarize(
-    weight       = as.numeric(DB090),
+    weight         = as.numeric(DB090),
     
     NUTS2 = DB040,
     galicia        = ifelse(any(DB040 == "ES11"), 1, 0),
@@ -175,10 +179,10 @@ household <- household %>%
     canarias       = ifelse(any(DB040 == "ES70"), 1, 0),
     extraregio     = ifelse(any(DB040 == "ESZZ"), 1, 0),
     
-    bonosocial   = ifelse(any(HS022 == "1"), 1, 0),
-    naturalight  = ifelse(any(HS160 == "1"), 1, 0),
-    noises       = ifelse(any(HS170 == "1"), 1, 0),
-    pollution    = ifelse(any(HS180 == "1"), 1, 0),
+    bonosocial     = ifelse(any(HS022 == "1"), 1, 0),
+    naturalight    = ifelse(any(HS160 == "1"), 1, 0),
+    noises         = ifelse(any(HS170 == "1"), 1, 0),
+    pollution      = ifelse(any(HS180 == "1"), 1, 0),
     
     pagar.enoughtemp.wint = ifelse(any(HH050 == "1"), 1, 0),
     material.depriv       = ifelse(any(vhMATDEP == "1"), 1, 0),
@@ -191,41 +195,41 @@ household <- household %>%
     enough.temp.summ = ifelse(any(HC070 == "1"), 1, 0),
     
     
-    highpopulation   = ifelse(any(DB100 == 1), 1, 0),
+    highlyurbanised  = ifelse(any(DB100 == 1), 1, 0),
     mediumpopulation = ifelse(any(DB100 == 2), 1, 0),
     lowpopulation    = ifelse(any(DB100 == 3), 1, 0),
     
     hhmembers        = as.numeric(HB120),
     
-    detachedindep = ifelse(any(HH010 == 1), 1, 0), 
-    semidetached  = ifelse(any(HH010 == 2), 1, 0),
-    flatless10    = ifelse(any(HH010 == 3), 1, 0),
-    flatmore10    = ifelse(any(HH010 == 4), 1, 0),
+    detachedindep    = ifelse(any(HH010 == 1), 1, 0), 
+    semidetached     = ifelse(any(HH010 == 2), 1, 0),
+    flatless10       = ifelse(any(HH010 == 3), 1, 0),
+    flatmore10       = ifelse(any(HH010 == 4), 1, 0),
     
-    detached     = ifelse(any(HH010 %in% c(1,2)), 1, 0),
-    flatorapt    = ifelse(any(HH010 %in% c(3,4)), 1, 0),
+    detached         = ifelse(any(HH010 %in% c(1,2)), 1, 0),
+    flatorapt        = ifelse(any(HH010 %in% c(3,4)), 1, 0),
     
-    ownership    = ifelse(any(HH021 == 1 | HH021 == 2), 1, 0),
-    rental       = ifelse(any(HH021 == 3 | HH021 == 4), 1, 0),
-    otherregimes = ifelse(any(HH021 == 5), 1, 0),
+    ownership        = ifelse(any(HH021 == 1 | HH021 == 2), 1, 0),
+    rental           = ifelse(any(HH021 == 3 | HH021 == 4), 1, 0),
+    otherregimes     = ifelse(any(HH021 == 5), 1, 0),
+        
+    rooms            = as.numeric(HH030),
     
-    rooms        = as.numeric(HH030),
-    
-    oneadult     = ifelse(any(HX060 %in% c(1, 2, 3, 4, 5, 6, 10)), 1, 0),
-    twoadults    = ifelse(any(HX060 %in% c(7, 8, 11, 12, 13)), 1, 0),
-    otherhhtypes = ifelse(any(HX060 %in% c(9, 14)), 1, 0),
-    kids         = ifelse(any(HX060 %in% c(10, 11, 12, 13, 14)), 1, 0),
-    
-    sqmeters     = as.numeric(HC020),
-    sqmeteroom   = as.numeric(HC020) / as.numeric(HH030),
-    
-    moisturedamage = ifelse(any(HH040 == "1"), 1, 0),
-    
-    districtheating = ifelse(any(HC001 == "1"), 1, 0),
-    centralheating  = ifelse(any(HC001 == "2"), 1, 0),
-    indivheating    = ifelse(any(HC001 == "3"), 1, 0),
-    portableheating = ifelse(any(HC001 == "4"), 1, 0),
-    noheatingsystem = ifelse(any(HC001 == "5"), 1, 0),
+    oneadult         = ifelse(any(HX060 %in% c(1, 2, 3, 4, 5, 6, 10)), 1, 0),
+    twoadults        = ifelse(any(HX060 %in% c(7, 8, 11, 12, 13)), 1, 0),
+    otherhhtypes     = ifelse(any(HX060 %in% c(9, 14)), 1, 0),
+    kids             = ifelse(any(HX060 %in% c(10, 11, 12, 13, 14)), 1, 0),
+        
+    sqmeters         = as.numeric(HC020),
+    sqmeteroom       = as.numeric(HC020) / as.numeric(HH030),
+     
+    moisturedamage   = ifelse(any(HH040 == "1"), 1, 0),
+     
+    districtheating  = ifelse(any(HC001 == "1"), 1, 0),
+    centralheating   = ifelse(any(HC001 == "2"), 1, 0),
+    indivheating     = ifelse(any(HC001 == "3"), 1, 0),
+    portableheating  = ifelse(any(HC001 == "4"), 1, 0),
+    noheatingsystem  = ifelse(any(HC001 == "5"), 1, 0),
     
     electricity_heat = ifelse(any(HC002 == "1"), 1, 0),
     gas_heat         = ifelse(any(HC002 == "2"), 1, 0),
@@ -252,7 +256,8 @@ household <- household %>%
     ), 
     
     # Recode HC003 values to get the binary "retrofit"
-    retrofit = ifelse(HC003 %in% c(1, 2, 3), 1, ifelse(HC003 == 99, NA_real_, 0))
+    retrofit = ifelse(HC003 %in% c(1, 2, 3), 1, 
+                      ifelse(HC003 == 99, NA_real_, 0))
   )
 
 individual <- individual %>%
@@ -309,9 +314,9 @@ n_original_weighted   <- sum(data$weight, na.rm = TRUE)
 
 # ================== 2. LOAD & MERGE ADDITIONAL DATA ===========================
 
-# Merge HDD & CDD by NUTS2 from AGRI4CAST----
+# Merge HDD & CDD by NUTS2 from AGRI4CAST JCR EU Portal ----
 
-hdd_cdd <- "HDD_CDD.xlsx" # Load file from Agri4Cast 
+hdd_cdd <- "HDD_CDD.xlsx" # Load file downloaded from Agri4Cast 
 
 HDD <- read_excel(hdd_cdd, sheet = 2) # Create HDD object (sheet 2 .xlsx)
 names(HDD) # Check names
@@ -327,6 +332,10 @@ names(CDD) # Check removal
 # Merge "data" and "HDD" & "CDD" objects
 data <- left_join(data, HDD, by = "NUTS2")
 data <- left_join(data, CDD, by = "NUTS2")
+
+# Keep variables of interest
+data$HDD_1723 <- data$HDD_media_17_23
+data$CDD_1723 <- data$CDD_media_17_23
 
 remove("hdd_cdd") # Clean environment & workspace
 gc() # Keep memory usage low
@@ -360,8 +369,8 @@ data$region <- factor(data$region)
 ## b. Identify & remove NA's (retrofit) ----
 
 # Count NA's in retrofit before removal
-n_na_retrofit <- sum(is.na(data$retrofit))
-weight_na_retrofit <- sum(data$weight[is.na(data$retrofit)], na.rm = TRUE)
+n_na_retrofit              <- sum(is.na(data$retrofit))
+weight_na_retrofit         <- sum(data$weight[is.na(data$retrofit)], na.rm = TRUE)
 pct_na_retrofit_unweighted <- 100 * n_na_retrofit / nrow(data)
 pct_na_retrofit_weighted   <- 100 * weight_na_retrofit / sum(data$weight, na.rm = TRUE)
 
@@ -387,8 +396,8 @@ n_lowincome_total   <- length(data$vhRentaa[data$vhRentaa <= 100])
 n_negative_income   <- length(data$vhRentaa[data$vhRentaa < 0])
 
 pct_lowincome_unweighted <- 100 * n_lowincome_total / nrow(data)
-weight_lowincome <- sum(data$weight[data$vhRentaa <= 100], na.rm = TRUE)
-pct_lowincome_weighted <- 100 * weight_lowincome / sum(data$weight, na.rm = TRUE)
+weight_lowincome         <- sum(data$weight[data$vhRentaa <= 100], na.rm = TRUE)
+pct_lowincome_weighted   <- 100 * weight_lowincome / sum(data$weight, na.rm = TRUE)
 
 # Control accumulated % of removed observations (real and in the dataset)
 removed_dataset  <- removed_dataset  + pct_lowincome_unweighted
@@ -403,11 +412,7 @@ removed_dataset
 removed_weighted 
 
 
-# ================== 4. STANDARDISE VARIABLES ==================================
-
-# Continuous covariates are standardized to reduce scale differences across 
-# regressors to optimise performance
-# As results will be reported in terms of AMEs, rescaling does not alter results
+# ================== 4. TRANSFORM VARIABLES ==================================
 
 ## a. Log & scale "income" ----
 
@@ -418,145 +423,6 @@ data$ln_income <- log(data$vhRentaa)
 summary(data$ln_income)
 hist(data$ln_income)
 boxplot(data$ln_income)
-
-# Standardize the variable (0,1) for algorithm's convergence
-data$ln_income_z <- scale(data$ln_income)[,1]
-boxplot(data$ln_income_z)
-hist(data$ln_income_z)
-
-## e. Scale HDD & CDD ----
-
-# Check distribution HDD
-par(mfrow = c(1, 2))
-hist(data$HDD_media_17_23, main = "HDD Media 2017-2023", col = "lightblue")
-boxplot(data$HDD_media_17_23, main = "HDD media 2017-2023", col = "lightblue")
-
-# Check distribution CDD
-hist(data$CDD_media_17_23, main = "CDD Media 2017-2023",
-     col = "lightcoral")
-boxplot(data$CDD_media_17_23, main = "CDD media 2017-2023",
-        col = "lightcoral")
-par(mfrow = c(1, 1)) # reset plot viewer
-
-summary(data$HDD_media_17_23)
-summary(data$CDD_media_17_23)
-
-# Scale them to help algorithm's convergence
-data$HDD_1723_z <- scale(data$HDD_media_17_23)[,1]
-data$CDD_1723_z <- scale(data$CDD_media_17_23)[,1]
-
-# Keep original ones also
-data$HDD_1723 <- data$HDD_media_17_23
-data$CDD_1723 <- data$CDD_media_17_23
-
-# Checks
-par(mfrow=c(1,2))
-hist(data$HDD_media_17_23, main = "HDD - Original", col="lightblue")
-hist(data$HDD_1723, main = "HDD - Scaled", col="lightgreen")
-
-hist(data$CDD_media_17_23, main = "CDD - Original", col="lightblue")
-hist(data$CDD_1723, main = "CDD - Scaled", col="lightgreen")
-par(mfrow=c(1,1))
-
-## f. Scale "meanageadults" ---- 
-summary(data$meanageadults)
-hist(data$meanageadults)
-boxplot(data$meanageadults)
-data$meanageadults_z <- scale(data$meanageadults)[,1]
-
-# Checks:
-summary(data$meanageadults_z)
-hist(data$meanageadults_z)
-boxplot(data$meanageadults_z)
-
-## g. Scale "rooms" ----
-
-# Check distribution of rooms
-summary(data$rooms) # 71 NA's !!!  
-hist(data$rooms, main = "Rooms", col = "lightblue")
-boxplot(data$rooms, main = "Rooms", col = "lightblue")
-
-# Standardize rooms (mean = 0, SD = 1) for numerical stability
-data$rooms_z <- scale(data$rooms)[,1]
-
-# Checks: scaled variable
-summary(data$rooms_z)
-hist(data$rooms_z, main = "Rooms - Scaled", col = "lightgreen")
-boxplot(data$rooms_z, main = "Rooms - Scaled", col = "lightgreen")
-
-## h. Scale "sqmeteroom" and "sqmeters" ----
-
-# Check distribution of sqmeteroom
-summary(data$sqmeteroom)
-hist(data$sqmeteroom, main = "Square Meters per Room", col = "lightblue")
-boxplot(data$sqmeteroom, main = "Square Meters per Room", col = "lightblue")
-
-# Standardize sqmeteroom
-data$sqmeteroom_z <- scale(data$sqmeteroom)[,1]
-
-# Checks: scaled variable
-summary(data$sqmeteroom_z)
-hist(data$sqmeteroom_z, main = "Square Meters per Room - Scaled", col = "lightgreen")
-boxplot(data$sqmeteroom_z, main = "Square Meters per Room - Scaled", col = "lightgreen")
-
-# Check distribution of sqmeters
-summary(data$sqmeters)
-hist(data$sqmeters, main = "Square Meters per Room", col = "lightblue")
-boxplot(data$sqmeters, main = "Square Meters per Room", col = "lightblue")
-
-# Standardize sqmeteroom
-data$sqmeters_z <- scale(data$sqmeters)[,1]
-
-# Checks: scaled variable
-summary(data$sqmeters_z)
-hist(data$sqmeters_z, main = "Square Meters per Room - Scaled", col = "lightgreen")
-boxplot(data$sqmeters_z, main = "Square Meters per Room - Scaled", col = "lightgreen")
-
-## i. Scale "actualrent" ----
-
-# Check distribution of actualrent
-summary(data$actualrent)
-hist(data$actualrent, main = "Actual Rent", col = "lightblue")
-boxplot(data$actualrent, main = "Actual Rent", col = "lightblue")
-
-# Standardize actualrent
-data$actualrent_z <- scale(data$actualrent)[,1]
-
-# Checks: scaled variable
-summary(data$actualrent_z)
-hist(data$actualrent_z, main = "Actual Rent - Scaled", col = "lightgreen")
-boxplot(data$actualrent_z, main = "Actual Rent - Scaled", col = "lightgreen")
-
-## j. Scale "housingcosts" ----
-
-# Check distribution of housingcosts
-summary(data$housingcosts)
-hist(data$housingcosts, main = "Housing Costs", col = "lightblue")
-boxplot(data$housingcosts, main = "Housing Costs", col = "lightblue")
-
-# Standardize housingcosts
-data$housingcosts_z <- scale(data$housingcosts)[,1]
-
-# Checks: scaled variable
-summary(data$housingcosts_z)
-hist(data$housingcosts_z, main = "Housing Costs - Scaled", col = "lightgreen")
-boxplot(data$housingcosts_z, main = "Housing Costs - Scaled", col = "lightgreen")
-
-## k. Scale "hh_members" ----
-
-# Check distribution of hh_members
-summary(data$hhmembers)
-hist(data$hhmembers, main = "Household Members", col = "lightblue")
-boxplot(data$hhmembers, main = "Household Members", col = "lightblue")
-
-# Standardize hh_members
-data$hhmembers_z <- scale(data$hhmembers)[,1]
-
-# Checks: scaled variable
-summary(data$hhmembers_z)
-hist(data$hhmembers_z, main = "Household Members - Scaled", col = "lightgreen")
-boxplot(data$hhmembers_z, main = "Household Members - Scaled", col = "lightgreen")
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 5. TRACKING: SAMPLE SELECTION & REMOVAL SUMMARY
