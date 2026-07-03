@@ -26,7 +26,7 @@ The code is a staged pipeline. Each stage saves its intermediate objects to disk
 
 ## **How to Run the Code**
 **Clone this repository:**
-git clone https://github.com/merceamvi/rehabSpain.git
+git clone https://github.com/merceamvi/retrofitSpain.git
 
 Place `HDD_CDD.xlsx` in the repository directory. Open the project in RStudio or your preferred R environment and run `00_run_all.R` from start to finish. The pipeline installs/updates packages, downloads the data, builds the dataset, and generates all outputs (tables, figures, models) in the working directory.
 
