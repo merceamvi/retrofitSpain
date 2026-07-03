@@ -1,7 +1,7 @@
 ###############################################################################
-# Project       : [rehabSpain] [00] MASTER RUNNER
+# Project       : [retrofitSpain] [00] MASTER RUNNER
 # Creation date : 09/06/2026
-# Last update   : 22/06/2026
+# Last update   : 26/06/2026
 # Author        : Mercè Amich (merce.amich@ehu.eus)
 # Institution   : UPV/EHU, BC3
 
@@ -37,4 +37,3 @@ source("02_descriptives_logit.R")
 source("03_famd_clustering.R")
 source("04_profiles_ames.R")
 
-cat("PIPELINE COMPLETE")
