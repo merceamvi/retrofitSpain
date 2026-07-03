@@ -1,5 +1,5 @@
 ###############################################################################
-# Project       : [rehabSpain] [3] FAMD & GMM CLUSTERING
+# Project       : [retrofitSpain] [3] FAMD & GMM CLUSTERING
 # Creation date : 02/12/2024
 # Last update   : 22/06/2026
 # Author        : Mercè Amich (merce.amich@ehu.eus)
@@ -445,7 +445,7 @@ remove(post, gmm_model, cluster_quality)
 gc()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 6. PROFILE CHARACTERIZATION
+# 6. PROFILE CHARACTERISATION
 # ══════════════════════════════════════════════════════════════════════════════
 
 # Step 1: compute profile characteristics
