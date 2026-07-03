@@ -1,5 +1,5 @@
 ###############################################################################
-# Project       : [rehabSpain] [1] DOWNLOAD DATA & MERGE FUSED AND CLIMATIC
+# Project       : [retrofitSpain] [1] DOWNLOAD DATA & MERGE FUSED AND CLIMATIC
 # Creation date : 02/12/2024
 # Last update   : 26/06/2026
 # Author        : Mercè Amich (merce.amich@ehu.eus)
