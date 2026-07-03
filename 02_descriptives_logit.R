@@ -1,5 +1,5 @@
 ###############################################################################
-# Project       : [rehabSpain] [2] DESCRIPTIVES & BASELINE LOGIT
+# Project       : [retrofitSpain] [2] DESCRIPTIVES & BASELINE LOGIT
 # Creation date : 02/12/2024
 # Last update   : 26/06/2026
 # Author        : Mercè Amich (merce.amich@ehu.eus)
