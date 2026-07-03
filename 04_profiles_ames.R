@@ -1,5 +1,5 @@
 ###############################################################################
-# Project       : [rehabSpain] [4] PROFILE-SPECIFIC ANALYSIS
+# Project       : [retrofitSpain] [4] PROFILE-SPECIFIC ANALYSIS
 # Creation date : 02/12/2024
 # Last update   : 26/06/2026
 # Author        : Mercè Amich (merce.amich@ehu.eus)
