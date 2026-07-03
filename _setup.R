@@ -1,5 +1,5 @@
 ###############################################################################
-# Project       : [rehabSpain] [0] SHARED SETUP (packages, theme, helpers)
+# Project       : [retrofitSpain] [0] SHARED SETUP (packages, theme, helpers)
 # Creation date : 02/12/2024
 # Last update   : 26/06/2026
 # Author        : Mercè Amich (merce.amich@ehu.eus)
