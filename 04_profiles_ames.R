@@ -2,8 +2,8 @@
 # Project       : [retrofitSpain] [4] PROFILE-SPECIFIC ANALYSIS
 # Creation date : 02/12/2024
 # Last update   : 26/06/2026
-# Author        : [ANONIMISED FOR PEER-REVIEW]
-# Institution   : [ANONIMISED FOR PEER-REVIEW]
+# Author        : Mercè Amich (merce.amich@ehu.eus)
+# Institution   : UPV/EHU, BC3
 # Last run time : 5 min.
 
 # Script Overview:
