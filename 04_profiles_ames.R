@@ -431,7 +431,7 @@ ggsave("FigureC2_observed_vs_predicted.tiff",
        width  = 19,
        height = 10.7,
        units  = "cm",
-       dpi    = 1000)
+       dpi    = 300)
 
 remove(figC2, figC2_df, prof_adopt, overall_obs, profile_x_labels)
 gc()
