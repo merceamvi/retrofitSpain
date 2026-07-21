@@ -758,7 +758,7 @@ ggsave("Figure1_AME_forest.tiff",
        width  = 20,
        height = 15,
        units  = "cm",
-       dpi    = 900)
+       dpi    = 300)
 
 # Clean up
 remove(boot_ame, boot_ame_fn, .eb, tblB2, fig1, ame_plot_df, block_map, 
