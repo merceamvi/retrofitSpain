@@ -1,4 +1,4 @@
-# *Which constraint binds? Profile-specific barriers to residential retrofit adoption in Spain**
+# *Which constraint binds? Profile-specific barriers to residential retrofit adoption in Spain*
 This repository contains the R code for the paper of the same title, **currently under review**.
 
 ## **Overview**
