@@ -1,4 +1,4 @@
-# **Structured heterogeneity in residential retrofit adoption: profile-specific evidence from Spain**
+# *Which constraint binds? Profile-specific barriers to residential retrofit adoption in Spain**
 This repository contains the R code for the paper of the same title, **currently under review**.
 
 ## **Overview**
@@ -43,7 +43,7 @@ You are free to copy, modify, and distribute the work as long as you provide app
 ### Citation
 
 If you use or adapt this code for your work, please cite:
-*Amich, M., Arto, I., Mariel, P. (2026). Structured heterogeneity in residential retrofit adoption: profile-specific evidence from Spain. Manuscript under review.*
+*Amich, M., Arto, I., Mariel, P. (2026). Which constraint binds? Profile-specific barriers to residential retrofit adoption in Spain. Manuscript under review.*
 
 - **Mercè Amich**, Basque Centre for Climate Change (BC3), Scientific Campus of the University of the Basque Country (UPV/EHU), Building 1, 1st floor, Sarriena s/n, E48940 Leioa, Spain; and University of the Basque Country (EHU), Avda. Lehendakari Aguirre, 83, E48015 Bilbao, Spain. E-mail: [merce.amich@bc3research.org](mailto:merce.amich@bc3research.org)
 - **Iñaki Arto**, Basque Centre for Climate Change (BC3), Scientific Campus of the University of the Basque Country, Building 1, 1st floor, Sarriena s/n, E48940 Leioa, Spain. E-mail: [inaki.arto@bc3research.org](mailto:inaki.arto@bc3research.org)
