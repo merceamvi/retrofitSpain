@@ -140,7 +140,7 @@ ggsave("FigureC1_FAMD_screeplot.tiff",
        width  = 14,
        height = 9,
        units  = "cm",
-       dpi    = 900)
+       dpi    = 300)
 
 # Extract FAMD components
 var_contrib   <- famd_result$var$contrib    [, 1:n_factors, drop = FALSE]
