@@ -2,8 +2,8 @@
 # Project       : [retrofitSpain] [4] PROFILE-SPECIFIC ANALYSIS
 # Creation date : 02/12/2024
 # Last update   : 26/06/2026
-# Author        : Mercè Amich (merce.amich@ehu.eus)
-# Institution   : UPV/EHU, BC3
+# Author        : [ANONIMISED FOR PEER-REVIEW]
+# Institution   : [ANONIMISED FOR PEER-REVIEW]
 # Last run time : 5 min.
 
 # Script Overview:
@@ -12,7 +12,7 @@
 #     - profile-specific HC1-robust logit coefficients (Table D.1)
 #     - profile-specific bootstrapped AMEs (Table D.2)
 #     - observed vs predicted adoption by profile (Figure C.2)
-#     - profile-faceted AME figure (Figure 3)
+#     - profile-faceted AME figure (Figure 2)
 
 # Requirements:
 #   - This script must be in the same directory as:
@@ -53,9 +53,9 @@ df_lr$profile_gmm <- factor(df_lr$profile_gmm)
 #   retrofit ~ active_vars + profile_gmm
 form_restricted <- update(formula_baseline, . ~ . + profile_gmm)
 m_restricted    <- glm(form_restricted,
-                    family  = binomial("logit"),
-                    data    = df_lr,
-                    weights = weight_final)
+                       family  = binomial("logit"),
+                       data    = df_lr,
+                       weights = weight_final)
 
 # Interacted: retrofit ~ (active_vars) * profile_gmm
 #   (profile-specific intercepts and slopes). Interaction terms not identified
@@ -393,9 +393,9 @@ figC2 <- ggplot(figC2_df, aes(x = profile_gmm, y = rate, fill = type)) +
   labs(title   = NULL,
        x       = "Household profile (GMM)",
        y       = "Adoption rate (%)",
-       caption = sprintf(paste0(
-         "Notes: Predicted rates from baseline logit. Dashed line = overall weighted mean (%.1f%%)"),
-         100 * overall_obs, chi_adopt$parameter, chi_adopt$statistic)) +
+       caption = sprintf(
+         "Notes: Predicted rates from baseline logit. Dashed line = overall weighted mean (%.1f%%).",
+         100 * overall_obs)) +
   theme_minimal(base_size = 10) +
   theme(
     plot.caption          = element_text(size = 8, color = "gray30",
@@ -424,22 +424,22 @@ figC2 <- ggplot(figC2_df, aes(x = profile_gmm, y = rate, fill = type)) +
 
 print(figC2)
 ggsave("FigureC2_observed_vs_predicted.pdf", figC2,
-       width = 7.5, height = 4.2, device = cairo_pdf)
+       width = 7.48, height = 4.2, device = cairo_pdf)
 ggsave("FigureC2_observed_vs_predicted.tiff",
        plot   = figC2,
        device = "tiff",
        width  = 19,
-       height = 10.5,
+       height = 10.7,
        units  = "cm",
-       dpi    = 900)
+       dpi    = 1000)
 
 remove(figC2, figC2_df, prof_adopt, overall_obs, profile_x_labels)
 gc()
 
 
-# FIGURE 3: Profile-specific AMEs (faceted by profile)
+# FIGURE 2: Profile-specific AMEs (faceted by profile)
 
-block_map_fig3 <- c(
+block_map_fig2 <- c(
   "CDD_1723"         = "Climatic",
   "HDD_1723"         = "Climatic",
   "ownership"        = "Dwelling and environmental",
@@ -453,7 +453,7 @@ block_map_fig3 <- c(
   "highlyurbanised"  = "Socio-demographic",
   "kids"             = "Socio-demographic"
 )
-block_order_fig3 <- c("Climatic",
+block_order_fig2 <- c("Climatic",
                       "Dwelling and environmental",
                       "Socio-demographic")
 
@@ -467,10 +467,10 @@ pal_profiles_named <- c(
 
 # Profile labels for facet headers
 profile_facet_labels <- c(
-  "P1" = "P1: Cold-climate semi-rural\nhomeowners (detached)",
-  "P2" = "P2: Educated urban homeowners\n(apartment blocks)",
-  "P3" = "P3: Warm-climate homeowners\n(detached)",
-  "P4" = "P4: Low-income young renters\n(small, deteriorated urban)"
+  "P1" = "P1: Cold-climate\nsemi-rural homeowners\n(detached)",
+  "P2" = "P2: Educated urban\nhomeowners\n(apartment blocks)",
+  "P3" = "P3: Warm-climate\nhomeowners (detached)",
+  "P4" = "P4: Low-income young\nrenters (small,\ndeteriorated urban)"
 )
 
 # Derive variable order from Figure 1's ame_df (overall AME magnitude),
@@ -497,15 +497,15 @@ var_order_fig1 <- rev(c(
 
 prf_ame_plot <- prf_ame %>%
   mutate(
-    block = block_map_fig3[variable],
-    block = factor(block, levels = block_order_fig3),
+    block = block_map_fig2[variable],
+    block = factor(block, levels = block_order_fig2),
     label = factor(label, levels = var_order_fig1),
     prf   = factor(paste0("P", profile), levels = paste0("P", 1:4)),
     # Fill color: profile color if significant, white if not
     point_fill = ifelse(sig, as.character(pal_profiles_named[prf]), "white")
   )
 
-fig3 <- ggplot(prf_ame_plot,
+fig2 <- ggplot(prf_ame_plot,
                aes(x = label, y = ame, color = prf)) +
   
   geom_hline(yintercept = 0, linetype = "solid",
@@ -526,18 +526,21 @@ fig3 <- ggplot(prf_ame_plot,
   coord_flip() +
   
   scale_y_continuous(
-    breaks = scales::pretty_breaks(n = 5),
+    breaks = seq(-10, 20, 5),
     labels = number_format(accuracy = 1),
-    expand = expansion(mult = c(0.05, 0.05))
+    expand = expansion(mult = c(0.06, 0.06))
   ) +
   
   labs(
     title    = NULL,
     x        = NULL,
     y        = "Average marginal effect (pp)",
-    caption  = "Notes: AMEs re-estimated within each profile subsample. 
-    Filled points indicate 95% CI excludes zero;\nhollow points indicate non-significant effects. 
-    Bootstrapped CIs (1,000 iterations per profile)."
+    caption  = paste0(
+      "Notes: AMEs re-estimated within each profile subsample. ",
+      "Filled points indicate 95% CI excludes zero;\n",
+      "hollow points indicate non-significant effects. ",
+      "Bootstrapped CIs (1,000 iterations per profile)."
+    )
   ) +
   
   theme_minimal(base_size = 10) +
@@ -546,16 +549,16 @@ fig3 <- ggplot(prf_ame_plot,
                                          hjust = 0, margin = margin(t = 10)),
     plot.caption.position = "plot",
     axis.text.y           = element_text(size = 9, color = "black"),
-    axis.text.x           = element_text(size = 8.5, color = "black"),
+    axis.text.x           = element_text(size = 7.5, color = "black"),
     axis.title.x          = element_text(size = 10, margin = margin(t = 6)),
-    panel.spacing.x       = unit(0.9, "lines"),
+    panel.spacing.x       = unit(0.45, "lines"),
     panel.background      = element_blank(),
     panel.grid.major.x    = element_line(color = "gray88", linewidth = 0.3),
     panel.grid.minor.x    = element_blank(),
     panel.grid.major.y    = element_line(color = "gray95", linewidth = 0.2),
-    strip.text            = element_text(face = "bold", size = 8.5,
-                                         color = "black", lineheight = 0.95,
-                                         margin = margin(t = 4, b = 8)),
+    strip.text            = element_text(face = "bold", size = 7,
+                                         color = "black", lineheight = 1,
+                                         margin = margin(t = 4, b = 6)),
     strip.background      = element_blank(),
     strip.clip            = "off",
     axis.ticks.x          = element_line(color = "gray40", linewidth = 0.3),
@@ -564,12 +567,14 @@ fig3 <- ggplot(prf_ame_plot,
     plot.margin           = margin(t = 10, r = 12, b = 5, l = 5)
   )
 
-print(fig3)
-ggsave("Figure3_Profile_AME_FAMD4_k4.pdf",
-       plot = fig3, device = cairo_pdf,
-       width = 10.5, height = 5.5, units = "in")
+print(fig2)
+ggsave("Figure2_Profile_AME_FAMD4_k4.pdf",
+       plot = fig2, device = cairo_pdf,
+       width = 7.48, height = 6.2, units = "in")
 
-
+ggsave("Figure2_Profile_AME_FAMD4_k4.tiff",
+       plot = fig2, device = "tiff",
+       width = 19, height = 16, units = "cm", dpi = 300)
 # ══════════════════════════════════════════════════════════════════════════════
 # SCRIPT COMPLETE
 # ══════════════════════════════════════════════════════════════════════════════
